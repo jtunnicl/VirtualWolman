@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dumpy Level Simulator</title>
+<!--
+  Dumpy level simulator — read the staff through the telescope, book the readings, and send them to
+  the beach profile builder (profile.html). GEOG 262 Virtual Field Trip. Runs in the browser.
+  Open a stop with  level.html?stop=A2  (A2 Waharau, A3 Kaiaua, A4 Taramaire).
+  The "true" staff readings come from a group's dumpy-level survey on 11 October 2025.
+-->
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f4f3ef; --surface:#fcfcfb; --surface-2:#efeee9; --line:#dcdad3; --grid:#e6e4de;
+  --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#77766f; --accent:#1f3a4d; --accent-2:#2c5470;
+  --warn-bg:#fff1d6; --warn-ink:#6b4300; --ok-bg:#e1f1e6; --ok-ink:#1d5a32; --bad-bg:#fde4e1; --bad-ink:#8a1c12; --sel:#e6eef8; --r:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.app{max-width:1240px;margin:0 auto;padding:14px 16px 28px}
+header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px 20px;flex-wrap:wrap;margin-bottom:10px}
+h1{font-size:22px;line-height:1.2;margin:0;letter-spacing:-.01em}
+.sub{margin:3px 0 0;color:var(--ink-2);font-size:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.scene{padding:6px 8px 4px}
+.scene svg{display:block;width:100%;height:auto}
+.scene .cap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;font-size:13px;color:var(--ink-2);padding:2px 6px 4px}
+.work{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin-top:14px}
+@media (min-width:980px){.work{grid-template-columns:500px minmax(0,1fr);align-items:start}}
+.scope{display:flex;flex-direction:column;align-items:center;gap:8px}
+.scope canvas{width:100%;max-width:480px;aspect-ratio:1/1;display:block;border-radius:50%;box-shadow:0 0 0 10px #2b2b29,0 0 0 12px #111,0 6px 18px rgba(0,0,0,.35);touch-action:none;cursor:ns-resize}
+.zbar{display:flex;gap:6px;align-items:center;font-size:13.5px;color:var(--ink-2)}
+.zbar span{min-width:70px;text-align:center}
+.btn.sm{font-size:13px;padding:5px 10px}
+.scope .lbl{font-size:13px;color:var(--ink-2);text-align:center;max-width:440px}
+h2{font-size:17px;margin:0 0 6px}
+h3{font-size:14px;margin:14px 0 6px}
+p{margin:6px 0}
+.muted{color:var(--ink-2)} .small{font-size:13px}
+.entry{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0}
+.entry label{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--ink-2)}
+.entry input{font:600 18px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:100%;background:#fff;color:var(--ink)}
+.entry input:disabled{background:var(--surface-2);color:var(--ink-3)}
+.entry input.ok{border-color:#3c8f5a;background:var(--ok-bg)}
+.entry input.bad{border-color:#c0392b;background:var(--bad-bg)}
+.fb{font-size:13px;min-height:1.2em;margin-top:2px}
+.fb.ok{color:var(--ok-ink)} .fb.bad{color:var(--bad-ink)}
+.btns{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.btn{text-decoration:none;display:inline-block;font:inherit;font-size:14px;line-height:1.2;padding:8px 13px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent-2)}
+.btn[disabled]{opacity:.45;cursor:default}
+input:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
+.note{font-size:13.5px;background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:8px 0}
+.okbox{background:var(--ok-bg);color:var(--ok-ink);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13.5px}
+.warnbox{background:var(--warn-bg);color:var(--warn-ink);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13.5px}
+.tablewrap{border:1px solid var(--line);border-radius:8px;overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:5px 8px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
+th:first-child,td:first-child,td.l,th.l{text-align:left}
+thead th{background:var(--surface-2);color:var(--ink-2);font-weight:600;font-size:12.5px}
+tr.cur td{background:var(--sel)}
+.flag{display:inline-block;background:var(--warn-bg);color:var(--warn-ink);border-radius:6px;padding:1px 6px;font-size:12px;font-weight:550}
+.okf{display:inline-block;background:var(--ok-bg);color:var(--ok-ink);border-radius:6px;padding:1px 6px;font-size:12px;font-weight:550}
+details{margin-top:10px} summary{cursor:pointer;color:var(--ink-2);font-size:14px}
+.steps{margin:6px 0;padding-left:18px;font-size:13.5px}
+.steps li{margin:2px 0}
+.stopbar{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:14px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.seg a{font-size:14px;padding:6px 11px;color:var(--ink);text-decoration:none}
+.seg a+a{border-left:1px solid var(--line)}
+.seg a[aria-current=page]{background:var(--accent);color:#fff}
+.example{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.example canvas{width:200px;height:200px;border-radius:50%;box-shadow:0 0 0 5px #2b2b29}
+.example div{flex:1 1 220px;font-size:13.5px}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;font-size:14px;z-index:70;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
+.toast.show{opacity:1}
+#walker{transition:transform 1.2s ease-in-out}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div><h1>Dumpy level simulator</h1><p class="sub">Run the beach survey yourself: read the staff, book the readings, then build the profile.</p></div>
+    <div class="stopbar"><span class="muted">Beach:</span><span class="seg" id="stopSeg"></span></div>
+  </header>
+
+  <div class="card scene">
+    <div id="scene"></div>
+    <div class="cap"><span id="sceneCap"></span><span>Drawn to true scale (no vertical exaggeration).</span></div>
+  </div>
+
+  <div class="work">
+    <div class="card scope">
+      <canvas id="tel" width="960" height="960" aria-label="View through the telescope of the level, showing the staff and crosshairs."></canvas>
+      <div class="zbar"><button class="btn sm" data-z="-1" aria-label="Zoom out">−</button><span id="zLbl">Zoom 1×</span><button class="btn sm" data-z="1" aria-label="Zoom in">+</button><button class="btn sm" data-z="0">Reset view</button></div>
+      <div class="lbl" id="telLbl"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="stTitle">Station</h2>
+      <div id="instr"></div>
+      <div class="entry" id="entry">
+        <label>Upper hair (m)<input id="inU" inputmode="decimal" autocomplete="off" placeholder="e.g. 1.500"><span class="fb" id="fbU"></span></label>
+        <label>Middle hair (m)<input id="inM" inputmode="decimal" autocomplete="off" placeholder="e.g. 1.422"><span class="fb" id="fbM"></span></label>
+        <label>Lower hair (m)<input id="inL" inputmode="decimal" autocomplete="off" placeholder="e.g. 1.345"><span class="fb" id="fbL"></span></label>
+      </div>
+      <div class="btns" id="actBtns"></div>
+      <div id="msg"></div>
+
+      <h3>Field book</h3>
+      <div class="tablewrap"><table id="book"></table></div>
+      <p class="small muted">Surveyors check every set of readings before moving on: the middle hair is exactly halfway between the other two, so (upper + lower) ÷ 2 should equal the middle reading to within a few millimetres.</p>
+
+      <details>
+        <summary>How to read the staff</summary>
+        <div class="example"><canvas id="ex" width="400" height="400" aria-label="Example telescope view"></canvas>
+        <div>
+          <p>The staff is marked in an E pattern. Each solid block is <b>1 cm</b> tall, with a 1 cm gap between blocks, so the edges of the blocks mark every centimetre. A block and its gap together are 2 cm.</p>
+          <p>The numbers mark every <b>tenth of a metre</b>: <b>14</b> means 1.4 m, and <b>7</b> means 0.7 m. The colour changes every metre: black from 0 to 1 m, red from 1 to 2 m, and so on.</p>
+          <p>In this example the middle hair is above <b>14</b>, so the reading is 1.4-something. It is 2 cm and about 2 mm above the 1.40 line, so the reading is <b>1.422 m</b>. Always read to the nearest millimetre by estimating within the centimetre.</p>
+        </div></div>
+      </details>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+'use strict';
+/* Field data: [station, upper, middle, lower] from the 11 October 2025 dumpy-level survey.
+   The simulator shows a staff consistent with each station's middle reading and stadia interval. */
+const STOPS = {
+  A2: { name: 'Waharau', code: 'A2/B5', rows: [[0, null, 1.55, null], [1, 1.635, 1.615, 1.595], [2, 1.25, 1.215, 1.18], [3, 1.03, 0.985, 0.92], [4, 0.84, 0.775, 0.715], [5, 1.11, 1.05, 0.98], [6, 1.42, 1.34, 1.27], [7, 1.73, 1.64, 1.57]] },
+  A3: { name: 'Kaiaua', code: 'A3/B4', rows: [[0, null, 1.68, null], [1, 1.6475, 1.635, 1.6275], [2, 1.835, 1.815, 1.795], [3, 2.68, 2.63, 2.575], [4, 2.5775, 2.525, 2.47], [5, 2.86, 2.8, 2.74], [6, 3.71, 3.61, 3.51], [7, 3.96, 3.75, 3.54]] },
+  A4: { name: 'Taramaire', code: 'A4/B3', rows: [[0, null, 1.717, null], [1, 1.815, 1.795, 1.775], [2, 2.21, 2.165, 2.12], [3, 2.555, 2.495, 2.44], [4, 2.54, 2.48, 2.415], [5, 2.715, 2.645, 2.58], [6, 3.58, 3.475, 3.37], [7, 4.375, 4.2, 4.061]] },
+};
+const ORDER = ['A2', 'A3', 'A4'];
+const TOL_OK = 0.0025, TOL_CLOSE = 0.006;  // metres
+const STAFF_LEN = 5;                        // metres
+const $ = s => document.querySelector(s);
+const nf = (v, d = 3) => (v == null || !isFinite(v)) ? '–' : v.toFixed(d);
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
+
+const qs = new URLSearchParams(location.search);
+const K = STOPS[qs.get('stop')] ? qs.get('stop') : 'A2';
+const D = STOPS[K];
+
+// "true" readings and geometry
+const TRUE = D.rows.map(([st, u, m, l]) => {
+  if (u == null) return { st, m, s: 0, u: null, l: null };
+  const s = u - l; return { st, m, s, u: m + s / 2, l: m - s / 2 };
+});
+const HI = TRUE[0].m;                                     // height of instrument above ground at the level
+TRUE.forEach(t => { t.x = 100 * t.s; t.z = HI - t.m; });  // distance from level, ground height relative to ground at level
+
+// state
+const KEY = 'levelsim:v1:' + K;
+let S = { cur: 0, book: [], tries: 0, done: false };
+try { const s = JSON.parse(store.get(KEY)); if (s && Array.isArray(s.book)) S = Object.assign(S, s); } catch (e) { }
+function save() { store.set(KEY, JSON.stringify(S)); }
+
+$('#stopSeg').innerHTML = ORDER.map(k => `<a href="?stop=${k}" ${k === K ? 'aria-current="page"' : ''}>${STOPS[k].name}</a>`).join('');
+document.title = `Dumpy level simulator — ${D.name}`;
+
+/* ---------- scene (cross-section cartoon) ---------- */
+const SC = { W: 1000, ml: 40, mr: 70, mt: 16, mb: 34 };
+let walkFrom = null, walkTo = null;
+function sceneSVG() {
+  const xmax = Math.max(...TRUE.map(t => t.x)), zmin = Math.min(0, ...TRUE.map(t => t.z)), zmaxGround = Math.max(0, ...TRUE.map(t => t.z));
+  const top = Math.max(HI + 0.6, zmaxGround + STAFF_LEN + 0.3);
+  const pw = SC.W - SC.ml - SC.mr, k = pw / (xmax + 3);           // px per metre, true scale
+  const bottom = zmin - 0.6;
+  const H = Math.round((top - bottom) * k + SC.mt + SC.mb);
+  const X = x => SC.ml + (x + 1.5) * k, Y = z => SC.mt + (top - z) * k;
+  const g = TRUE.slice().sort((a, b) => a.x - b.x);
+  const last = TRUE[TRUE.length - 1];
+  const groundPts = [[-1.5, g[0].z], ...g.map(t => [t.x, t.z]), [xmax + 3, last.z - 0.25]];
+  let s = `<svg viewBox="0 0 ${SC.W} ${H}" role="img" aria-label="Cross-section of the beach showing the level, the line of sight and the staff at each station" font-family="system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">`;
+  s += `<rect x="0" y="0" width="${SC.W}" height="${H}" fill="#eef4f8"/>`;
+  // sea
+  s += `<path d="M${X(last.x)},${Y(last.z)} L${X(xmax + 3)},${Y(last.z)} L${X(xmax + 3)},${H} L${X(last.x)},${H} Z" fill="#9cc3dc"/>`;
+  s += `<path d="M${X(last.x)},${Y(last.z)} L${X(xmax + 3)},${Y(last.z)}" stroke="#5f97bd" stroke-width="2"/>`;
+  // ground
+  s += `<path d="M${groundPts.map(p => X(p[0]) + ',' + Y(p[1])).join(' L')} L${X(xmax + 3)},${H} L${X(-1.5)},${H} Z" fill="#d9c9a3" stroke="#8a7a55" stroke-width="2" stroke-linejoin="round"/>`;
+  // station pegs & numbers
+  TRUE.forEach((t, i) => {
+    if (i === 0) return;
+    const booked = S.book[i] != null;
+    s += `<line x1="${X(t.x)}" y1="${Y(t.z)}" x2="${X(t.x)}" y2="${Y(t.z) - 7}" stroke="#333" stroke-width="2"/>`;
+    s += `<text x="${X(t.x)}" y="${Y(t.z) + 18}" text-anchor="middle" font-size="13" font-weight="${booked ? 650 : 400}" fill="${booked ? '#1d5a32' : '#52514e'}">${t.st}${booked ? ' ✓' : ''}</text>`;
+  });
+  // level, tripod, surveyor
+  const lx = X(0), gy = Y(0), iy = Y(HI);
+  s += `<g stroke="#333" stroke-width="2.5" stroke-linecap="round"><line x1="${lx}" y1="${iy + 6}" x2="${lx - 12}" y2="${gy}"/><line x1="${lx}" y1="${iy + 6}" x2="${lx + 12}" y2="${gy}"/><line x1="${lx}" y1="${iy + 6}" x2="${lx}" y2="${gy}"/></g>`;
+  s += `<rect x="${lx - 14}" y="${iy - 6}" width="28" height="11" rx="3" fill="#e2b43a" stroke="#333" stroke-width="1.5"/>`;
+  s += person(lx - 24, gy, iy, '#1f3a4d', true);
+  s += `<text x="${lx}" y="${iy - 14}" text-anchor="middle" font-size="12.5" fill="#0b0b0b" font-weight="650">level</text>`;
+  // line of sight to current station
+  const c = Math.min(S.cur, TRUE.length - 1), T = TRUE[c];
+  if (c > 0) s += `<line x1="${lx + 14}" y1="${iy}" x2="${X(T.x)}" y2="${iy}" stroke="#c0392b" stroke-width="1.6" stroke-dasharray="6 4"/>`;
+  // staff holder (walker)
+  const sx = X(T.x), sg = Y(T.z), mpx = k;
+  const from = walkFrom || [sx, sg];
+  walkTo = [sx, sg];
+  const walker = `<g id="walker" style="transform:translate(${from[0]}px,${from[1]}px)">
+    ${[...Array(STAFF_LEN)].map((_, j) => `<rect x="-3" y="${-(j + 1) * mpx}" width="6" height="${mpx}" fill="${j % 2 ? '#d61f1f' : '#222'}" stroke="#fff" stroke-width="0.6"/>`).join('')}
+    ${person(10, 0, null, '#6b4300', false, -1.7 * mpx)}
+  </g>`;
+  s += walker;
+  if (c > 0) s += `<circle cx="${sx}" cy="${iy}" r="5" fill="none" stroke="#c0392b" stroke-width="2"/>`;
+  s += `<text x="${X(xmax + 2.6)}" y="${Y(last.z) + 22}" text-anchor="end" font-size="12.5" fill="#24506e">sea</text>`;
+  s += `<text x="${X(-1.3)}" y="${H - 8}" font-size="12" fill="#52514e">← land</text>`;
+  s += `</svg>`;
+  return s;
+}
+function person(x, groundY, eyeY, col, atLevel, eyeOff) {
+  // simple stick figure; if eyeY is given, eye at that height
+  const h = eyeOff != null ? -eyeOff : (groundY - eyeY);
+  const ey = groundY - h, hy = ey - 2;
+  return `<g stroke="${col}" stroke-width="3" stroke-linecap="round" fill="none">
+    <circle cx="${x}" cy="${hy - 7}" r="7" fill="${col}" stroke="none"/>
+    <line x1="${x}" y1="${hy}" x2="${x}" y2="${groundY - h * 0.45}"/>
+    <line x1="${x}" y1="${groundY - h * 0.45}" x2="${x - 6}" y2="${groundY}"/><line x1="${x}" y1="${groundY - h * 0.45}" x2="${x + 6}" y2="${groundY}"/>
+    <line x1="${x}" y1="${hy + 8}" x2="${atLevel ? x + 12 : x - 9}" y2="${hy + (atLevel ? 6 : 14)}"/></g>`;
+}
+
+/* ---------- telescope view ---------- */
+function drawStaffView(cv, mView, sInt, opts = {}) {
+  const ctx = cv.getContext('2d'), N = cv.width, cx = N / 2, cy = N / 2, R = N / 2;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, N, N);
+  ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.clip();
+  const bg = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R); bg.addColorStop(0, '#f6f8f2'); bg.addColorStop(1, '#d7dccf');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, N, N);
+  const zf = opts.zoom || 1, pan = opts.pan || 0;
+  ctx.translate(cx, cy + pan); ctx.scale(zf, zf); ctx.translate(-cx, -cy);
+  const lw = 1 / zf;
+  const Hs = R * 0.38;                                    // stadia hair offset from centre (px)
+  const P = opts.P || (2 * Hs) / sInt;                    // px per metre on the staff
+  const cm = P / 100;
+  const left = cx - 1.8 * cm, wid = 4.9 * cm;
+  const Y = r => cy - (r - mView) * P;
+  const rTop = Math.min(STAFF_LEN, mView + 1.45 * R / P), rBot = Math.max(0, mView - 1.45 * R / P);
+  // staff face
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(left, Y(Math.min(STAFF_LEN, rTop + 0.1)), wid, Y(Math.max(0, rBot - 0.1)) - Y(Math.min(STAFF_LEN, rTop + 0.1)));
+  for (let d = Math.floor(rBot * 10) / 10; d <= rTop + 0.1; d = Math.round((d + 0.1) * 10) / 10) {
+    if (d < 0 || d >= STAFF_LEN - 1e-9) continue;
+    const col = Math.floor(d + 1e-9) % 2 === 1 ? '#e01515' : '#111111';
+    ctx.fillStyle = col;
+    for (let c = 1; c <= 9; c += 2) {                     // 1-cm blocks at odd centimetres
+      const r0 = d + c / 100, r1 = r0 + 0.01;
+      const x0 = c >= 5 ? left + 0.15 * cm : left + 1.0 * cm;
+      ctx.fillRect(x0, Y(r1), left + 2.4 * cm - x0, Y(r0) - Y(r1));
+    }
+    ctx.fillRect(left + 0.15 * cm, Y(d + 0.10), 0.85 * cm, Y(d + 0.05) - Y(d + 0.10));   // spine of the E
+    ctx.fillStyle = '#111';
+    ctx.fillRect(left + 0.15 * cm, Y(d) - Math.max(1, 0.08 * cm) / 2, wid - 0.15 * cm, Math.max(1, 0.08 * cm));  // decimetre line
+    // number
+    const label = String(Math.round(d * 10));
+    const hpx = 3.4 * cm;
+    ctx.save(); ctx.font = `700 ${hpx}px "Arial Narrow", "Roboto Condensed", Arial, sans-serif`; ctx.textBaseline = 'alphabetic';
+    const tw = ctx.measureText(label).width, maxw = 2.2 * cm, sx = Math.min(1, maxw / tw);
+    ctx.translate(left + 2.55 * cm, Y(d + 0.008)); ctx.scale(sx, 1); ctx.fillStyle = '#111'; ctx.fillText(label, 0, 0); ctx.restore();
+  }
+  // staff edges
+  ctx.fillStyle = '#111'; const e = Math.max(1.5 * lw, 0.12 * cm);
+  ctx.fillRect(left, -N, e, 3 * N); ctx.fillRect(left + wid - e, -N, e, 3 * N);
+  if (rTop >= STAFF_LEN - 1e-9) { ctx.fillStyle = bg; ctx.fillRect(-N, -2 * N, 3 * N, Y(STAFF_LEN) + 2 * N); }   // top of staff
+  // crosshairs
+  ctx.strokeStyle = '#333'; ctx.lineWidth = Math.max(2, N / 400) * lw;
+  ctx.beginPath(); ctx.moveTo(cx, -2 * N); ctx.lineTo(cx, 3 * N); ctx.moveTo(-2 * N, cy); ctx.lineTo(3 * N, cy);
+  if (!opts.noStadia) { ctx.moveTo(cx - R * 0.26, cy - Hs); ctx.lineTo(cx + R * 0.26, cy - Hs); ctx.moveTo(cx - R * 0.26, cy + Hs); ctx.lineTo(cx + R * 0.26, cy + Hs); }
+  ctx.stroke();
+  // answer overlay
+  if (opts.show) {
+    ctx.font = `700 ${N / 26 * lw}px system-ui, sans-serif`; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    const lines = opts.noStadia ? [['middle', mView, cy]] : [['upper', mView + sInt / 2, cy - Hs], ['middle', mView, cy], ['lower', mView - sInt / 2, cy + Hs]];
+    for (const [n, v, y] of lines) { const t = `${n} ${v.toFixed(3)}`; const x = cx + R * 0.30; ctx.strokeStyle = '#fff'; ctx.lineWidth = 6 * lw; ctx.strokeText(t, x, y); ctx.fillStyle = '#1f3a4d'; ctx.fillText(t, x, y); }
+  }
+  ctx.restore();
+  // vignette ring
+  ctx.beginPath(); ctx.arc(cx, cy, R - 1, 0, 7); ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 3; ctx.stroke();
+}
+
+/* ---------- UI ---------- */
+const inputs = { U: $('#inU'), M: $('#inM'), L: $('#inL') };
+let showAns = false, zoom = 1, pan = 0;
+const ZOOMS = [1, 1.5, 2, 3, 4];
+function drawTel() {
+  const c = Math.min(S.cur, TRUE.length - 1), T = TRUE[c], cv = $('#tel'), R = cv.width / 2;
+  const maxPan = (R * 0.38 + R * 0.15) * zoom;            // enough to bring either stadia hair to the centre
+  pan = Math.max(-maxPan, Math.min(maxPan, pan));
+  if (c === 0) drawStaffView(cv, T.m, 0, { P: 2600, noStadia: true, show: showAns, zoom, pan });
+  else drawStaffView(cv, T.m, T.s, { show: showAns, zoom, pan });
+  $('#zLbl').textContent = `Zoom ${zoom}×`;
+}
+function setZoom(dir) {
+  if (dir === 0) { zoom = 1; pan = 0; }
+  else { const i = Math.max(0, Math.min(ZOOMS.length - 1, ZOOMS.indexOf(zoom) + dir)); pan = pan * ZOOMS[i] / zoom; zoom = ZOOMS[i]; if (zoom === 1) pan = 0; }
+  drawTel();
+}
+(() => {
+  const cv = $('#tel'); let d = null;
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); d = { y: e.clientY, pan }; });
+  cv.addEventListener('pointermove', e => { if (!d || zoom === 1) return; const k = cv.width / cv.getBoundingClientRect().width; pan = d.pan + (e.clientY - d.y) * k; drawTel(); });
+  cv.addEventListener('pointerup', () => { d = null; }); cv.addEventListener('pointercancel', () => { d = null; });
+  cv.addEventListener('wheel', e => { e.preventDefault(); setZoom(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+})();
+function parse(v) {
+  v = String(v).trim().replace(',', '.'); if (!v) return { empty: true };
+  const n = Number(v); if (!isFinite(n)) return { bad: 'Type a number, e.g. 1.422' };
+  if (n > 10) return { bad: 'Enter metres, not millimetres (e.g. 1.422)' };
+  return { n };
+}
+function judge(n, t) {
+  const e = n - t, a = Math.abs(e);
+  if (a <= TOL_OK) return { ok: true, txt: '✓ good' };
+  if (a <= TOL_CLOSE) return { ok: false, close: true, txt: 'Close — estimate the millimetres more carefully' };
+  if (Math.abs(a - 0.1) < 0.012) return { ok: false, txt: 'Check which tenth-of-a-metre number you are in' };
+  if (Math.abs(a - 1) < 0.012) return { ok: false, txt: 'Check the metre: what colour is the staff here?' };
+  if (a < 0.03) return { ok: false, txt: 'Count the centimetre blocks again' };
+  return { ok: false, txt: 'Not quite — find the nearest number below the hair first' };
+}
+function render() {
+  const n = TRUE.length, c = Math.min(S.cur, n - 1), T = TRUE[c];
+  $('#scene').innerHTML = sceneSVG();
+  const wk = document.getElementById('walker');
+  if (wk && walkFrom && (walkFrom[0] !== walkTo[0] || walkFrom[1] !== walkTo[1])) { void wk.getBoundingClientRect(); requestAnimationFrame(() => { wk.style.transform = `translate(${walkTo[0]}px,${walkTo[1]}px)`; }); }
+  walkFrom = walkTo;
+  $('#sceneCap').textContent = S.done ? `${D.name}: survey complete.` : c === 0 ? `${D.name}: station 0 — the staff is held right next to the level.` : `${D.name}: the staff is at station ${T.st}. The red dashed line is the level's line of sight.`;
+  // telescope
+  const st0 = c === 0;
+  drawTel();
+  $('#telLbl').innerHTML = st0 ? 'Close-up of the staff held beside the level. The horizontal line marks the height of the telescope eyepiece.' : 'View through the telescope. Read the staff where each horizontal hair crosses it. On a small screen, zoom in, then drag up or down to see the upper and lower hairs.';
+  // instructions
+  $('#stTitle').textContent = S.done ? 'Survey complete' : `Station ${T.st} of ${n - 1}`;
+  $('#instr').innerHTML = S.done ? '' : st0
+    ? `<ol class="steps"><li>First measure the <b>height of the instrument</b>: the staff is stood on the ground right next to the level.</li><li>Read the staff at the height of the telescope (the horizontal line) and book it as the <b>middle</b> reading. There are no upper and lower readings here.</li></ol>`
+    : `<ol class="steps"><li>The staff-holder has walked to the next <b>break of slope</b> and is holding the staff upright.</li><li>Read the staff at the <b>upper</b>, <b>middle</b> and <b>lower</b> hairs, to the nearest millimetre.</li><li>Book them, then check (upper + lower) ÷ 2 against the middle reading.</li></ol>`;
+  $('#entry').style.display = S.done ? 'none' : '';
+  inputs.U.disabled = inputs.L.disabled = st0;
+  inputs.U.placeholder = st0 ? '—' : 'e.g. 1.500'; inputs.L.placeholder = st0 ? '—' : 'e.g. 1.345';
+  // buttons
+  const booked = S.book[c] != null;
+  let b = '';
+  if (S.done) b = `<a class="btn primary" href="profile.html?stop=${K}" target="_blank" rel="noopener" id="toProfile">Send my readings to the profile builder →</a><button class="btn" data-act="restart">Start again</button>`;
+  else if (booked) b = c < n - 1 ? `<button class="btn primary" data-act="next">Wave the staff on to station ${TRUE[c + 1].st} →</button>` : `<button class="btn primary" data-act="finish">Finish the survey</button>`;
+  else b = `<button class="btn primary" data-act="book">Book these readings</button>${S.tries >= 2 ? '<button class="btn" data-act="show">Show me the readings</button>' : ''}`;
+  if (!S.done) b += `<button class="btn" data-act="restart">Start again</button>`;
+  $('#actBtns').innerHTML = b;
+  renderBook();
+}
+function renderBook() {
+  const n = TRUE.length;
+  let rows = '';
+  for (let i = 0; i < n; i++) {
+    const B = S.book[i], cur = i === Math.min(S.cur, n - 1) && !S.done;
+    if (!B) { rows += `<tr class="${cur ? 'cur' : ''}"><td>${TRUE[i].st}</td><td></td><td></td><td></td><td></td><td></td><td></td><td class="l"></td></tr>`; continue; }
+    const avg = B.u != null ? (B.u + B.l) / 2 : null, diff = avg != null ? (Math.round((B.m - avg) * 10000) / 10 || 0) : null, dist = B.u != null ? 100 * (B.u - B.l) : 0;
+    const chk = diff == null ? '' : Math.abs(diff) <= 3 ? `<span class="okf">✓ ${diff.toFixed(1)} mm</span>` : `<span class="flag">⚠ ${diff.toFixed(1)} mm</span>`;
+    rows += `<tr class="${cur ? 'cur' : ''}"><td>${TRUE[i].st}</td><td>${nf(B.u)}</td><td>${nf(B.m)}</td><td>${nf(B.l)}</td><td>${avg != null ? avg.toFixed(4) : ''}</td><td>${chk}</td><td>${nf(dist, 2)}</td><td class="l">${B.shown ? 'readings shown' : i === 0 ? 'height of instrument' : ''}</td></tr>`;
+  }
+  $('#book').innerHTML = `<thead><tr><th>Station</th><th>Upper</th><th>Middle</th><th>Lower</th><th>(U+L) ÷ 2</th><th>Check</th><th>Distance (m)</th><th class="l">Remarks</th></tr></thead><tbody>${rows}</tbody>`;
+}
+function clearInputs() { for (const k in inputs) { inputs[k].value = ''; inputs[k].className = ''; } $('#fbU').textContent = $('#fbM').textContent = $('#fbL').textContent = ''; $('#fbU').className = $('#fbM').className = $('#fbL').className = 'fb'; $('#msg').innerHTML = ''; }
+function book() {
+  const c = S.cur, T = TRUE[c], st0 = c === 0;
+  const want = st0 ? [['M', T.m]] : [['U', T.u], ['M', T.m], ['L', T.l]];
+  let allOk = true; const vals = {};
+  for (const [k, t] of want) {
+    const p = parse(inputs[k].value), fb = $('#fb' + k);
+    if (p.empty) { fb.textContent = 'Enter a reading'; fb.className = 'fb bad'; inputs[k].className = 'bad'; allOk = false; continue; }
+    if (p.bad) { fb.textContent = p.bad; fb.className = 'fb bad'; inputs[k].className = 'bad'; allOk = false; continue; }
+    const j = judge(p.n, t); vals[k] = p.n;
+    fb.textContent = j.txt; fb.className = 'fb ' + (j.ok ? 'ok' : 'bad'); inputs[k].className = j.ok ? 'ok' : 'bad';
+    if (!j.ok) allOk = false;
+  }
+  if (allOk) {
+    S.book[c] = { u: st0 ? null : vals.U, m: vals.M, l: st0 ? null : vals.L };
+    S.tries = 0; save(); render();
+    const B = S.book[c];
+    $('#msg').innerHTML = st0 ? `<p class="okbox">✓ Booked. The telescope is ${B.m.toFixed(3)} m above the ground at the level.</p>`
+      : `<p class="okbox">✓ Booked. Check: (${B.u.toFixed(3)} + ${B.l.toFixed(3)}) ÷ 2 = ${((B.u + B.l) / 2).toFixed(4)}, against a middle reading of ${B.m.toFixed(3)}. Distance = 100 × (${B.u.toFixed(3)} − ${B.l.toFixed(3)}) = ${(100 * (B.u - B.l)).toFixed(2)} m.</p>`;
+  } else {
+    S.tries++; save(); render();
+    if (S.tries >= 2) $('#msg').innerHTML = '<p class="warnbox">Still stuck? Open “How to read the staff” below, or press “Show me the readings”.</p>';
+  }
+}
+function showReadings() {
+  const c = S.cur, T = TRUE[c];
+  S.book[c] = { u: c === 0 ? null : +T.u.toFixed(4), m: +T.m.toFixed(4), l: c === 0 ? null : +T.l.toFixed(4), shown: true };
+  S.tries = 0; save(); showAns = true; render();
+  $('#msg').innerHTML = `<p class="note">The readings are marked on the telescope view. Look at how each one lines up with the blocks, then move on. They have been booked for you.</p>`;
+}
+function sendToProfile(silent) {
+  const n = TRUE.length;
+  if (S.book.filter(Boolean).length < n) { toast('Finish all the stations first.'); return; }
+  let P = null; try { P = JSON.parse(store.get('beachprofile:v1')); } catch (e) { }
+  if (!P || P.v !== 1) P = { v: 1, stop: K, showAbney: false, stops: {} };
+  const ex = P.stops && P.stops[K];
+  if (!silent && ex && ex.source === 'sim' && !confirm('Replace the readings you sent before?')) return;
+  P.stops = P.stops || {};
+  P.stops[K] = { rows: S.book.map((B, i) => [String(TRUE[i].st), B.u == null ? '' : String(B.u), String(B.m), B.l == null ? '' : String(B.l), i === 0 ? 'staff at the level' : i === n - 1 ? 'water’s edge' : '']), water: n - 1, top: null, bot: null, source: 'sim' };
+  P.stop = K;
+  store.set('beachprofile:v1', JSON.stringify(P));
+  toast('Sent. Open the profile builder: your readings are in Step 1.');
+}
+let tt = 0; function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 3600); }
+
+document.addEventListener('click', e => {
+  const zb = e.target.closest('[data-z]'); if (zb) { setZoom(Number(zb.dataset.z)); return; }
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  switch (a.dataset.act) {
+    case 'book': book(); break;
+    case 'show': showReadings(); break;
+    case 'next': showAns = false; zoom = 1; pan = 0; S.cur++; S.tries = 0; save(); clearInputs(); render(); inputs.U.disabled ? inputs.M.focus() : inputs.U.focus(); break;
+    case 'finish': S.done = true; save(); clearInputs(); render(); $('#msg').innerHTML = `<p class="okbox">Survey complete. Send your readings to the profile builder, then work out the distances, heights and the beach profile from <b>your own</b> field book.</p>`; break;
+    case 'send': sendToProfile(false); break;
+    case 'restart': if (confirm('Start the survey again? Your booked readings for this beach will be cleared.')) { S = { cur: 0, book: [], tries: 0, done: false }; showAns = false; save(); clearInputs(); render(); } break;
+  }
+});
+for (const k in inputs) inputs[k].addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const b = document.querySelector('[data-act=book]'); if (b) book(); } });
+document.addEventListener('click', e => { if (e.target.closest('#toProfile')) sendToProfile(true); }, true);
+
+drawStaffView($('#ex'), 1.422, 0.155, {});
+render();
+})();
+</script>
+</body>
+</html>

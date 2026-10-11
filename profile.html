@@ -148,7 +148,7 @@ details{margin-top:12px} details summary{cursor:pointer;color:var(--ink-2);font-
     <div class="tablehead"><h3 id="fbTitle">Field book</h3>
       <div class="btns no-print"><button class="btn sm" data-act="addRow">+ Add station</button><button class="btn sm" data-act="delRow">Remove last</button><button class="btn sm" data-act="resetStop">Reset to class data</button><button class="btn sm" data-copy="t1">Copy table</button></div></div>
     <div class="tablewrap"><table id="t1"></table></div>
-    <p class="small muted">These are real readings from a group on the 11 October 2025 trip. You can type over them with your own group's readings — your changes are saved in this browser.</p>
+    <p class="small muted" id="fbNote"></p>
   </section>
 
   <section class="panel" data-step="2">
@@ -319,6 +319,9 @@ function stationOpts(R, sel) { return R.rows.map(r => `<option value="${r.i}"${r
 function render1() {
   const st = S.stops[S.stop];
   $('#fbTitle').textContent = `Field book — ${STOPS[S.stop].name} (${STOPS[S.stop].code})`;
+  $('#fbNote').innerHTML = st.source === 'sim'
+    ? 'These are <b>your own readings</b> from the level simulator. To go back to the 2025 group’s readings, press “Reset to class data”.'
+    : 'These are real readings from a group on the 11 October 2025 trip. You can type over them with your own group’s readings — your changes are saved in this browser.';
   $('#t1').innerHTML = `<thead><tr><th>Station</th><th>Upper (m)</th><th>Middle (m)</th><th>Lower (m)</th><th class="l">Notes</th></tr></thead><tbody>` +
     st.rows.map((r, i) => `<tr><td>${esc(r[0])}</td>${[1, 2, 3].map(c => `<td><input type="text" inputmode="decimal" data-cell="${i},${c}" value="${esc(r[c])}" aria-label="Station ${esc(r[0])} ${['', 'upper', 'middle', 'lower'][c]}"></td>`).join('')}<td class="l"><input type="text" class="note-in" data-cell="${i},4" value="${esc(r[4])}" aria-label="Station ${esc(r[0])} notes"></td></tr>`).join('') + '</tbody>';
 }
