@@ -72,13 +72,19 @@ const SWIPES = {
     after: { src: 'Orere_today.jpg', label: 'Today' },
     credit: 'Aerial imagery: Auckland Council GeoMaps.'
   },
+  Miranda: {
+    title: 'Miranda chenier plain — aerial photo and LiDAR',
+    before: { src: 'Miranda_aerial.jpg', label: 'Aerial photo', alt: 'Aerial photo of the Miranda coast: farmland on the chenier plain, a pale shell spit at the shore, and a dark band of mangroves along the coast to the south.' },
+    after: { src: 'Miranda_lidar.jpg', label: 'LiDAR', alt: 'LiDAR elevation map of the same area: hills in grey shading, the plain coloured from brown (higher) to green (lower), with curved chenier ridges showing as brown strips.' },
+    credit: 'Aerial imagery: Eagle Technology, LINZ. LiDAR: LINZ Data Service, CC BY 4.0.'
+  },
 };
 const $ = s => document.querySelector(s);
 const key = new URLSearchParams(location.search).get('s');
 const C = SWIPES[key] || SWIPES[Object.keys(SWIPES)[0]];
 document.title = C.title; $('#title').textContent = C.title; $('#credit').textContent = C.credit || '';
 $('#tagL').textContent = $('#fadeL').textContent = C.before.label; $('#tagR').textContent = $('#fadeR').textContent = C.after.label;
-$('#before').alt = `${C.before.label} aerial photo`; $('#after').alt = `${C.after.label} aerial photo`;
+$('#before').alt = C.before.alt || `${C.before.label} aerial photo`; $('#after').alt = C.after.alt || `${C.after.label} aerial photo`;
 
 const view = $('#view'), stage = $('#stage'), bImg = $('#before'), aImg = $('#after'), handle = $('#handle');
 let IW = 0, IH = 0, z = 1, tx = 0, ty = 0, pos = 0.5, mode = 'swipe';
