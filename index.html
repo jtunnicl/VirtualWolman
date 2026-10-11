@@ -1160,7 +1160,8 @@ window.addEventListener('afterprint', () => { $('#printFig').innerHTML = ''; pri
 /* ---------- photo loading ---------- */
 const QS = new URLSearchParams(location.search);
 const ONLY = (QS.get('photos') || '').split(',').map(s => s.trim()).filter(Boolean);
-const LIST = ONLY.length ? PHOTOS.filter(p => ONLY.includes(p.id)) : PHOTOS;
+// a photo named in ?photos= but not listed above is loaded from <name>.jpg in the same folder
+const LIST = ONLY.length ? ONLY.map(id => PHOTOS.find(p => p.id === id) || { id, label: id.replace(/_/g, ' ').replace(/\b0?(\d+)$/, '$1'), src: id + '.jpg' }) : PHOTOS;
 const QMODE = ['size', 'type'].includes(QS.get('mode')) ? QS.get('mode') : null;
 function photoList() { const l = [...(LIST.length ? LIST : PHOTOS)]; if (uploaded) l.push(uploaded); return l; }
 function fillSelect(sel) {
@@ -1185,7 +1186,7 @@ function loadPhoto(entry) {
     $('#empty').style.display = 'none';
     fit(); resize(); goStep(step);
   };
-  im.onerror = () => { $('#empty').textContent = 'Could not load this photo.'; };
+  im.onerror = () => { $('#empty').style.display = 'grid'; $('#empty').textContent = `This photo isn’t available yet (${entry.src}). Try another photo from the list, or ask your lecturer.`; };
   im.src = entry.src;
 }
 $('#photoSel').addEventListener('change', e => { const p = photoList().find(x => x.id === e.target.value); if (p) { step = 1; loadPhoto(p); } });
