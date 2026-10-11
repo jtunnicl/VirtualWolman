@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>360° Panorama Viewer</title>
+<!--
+  360° panorama viewer for wrap-around panoramas (e.g. Lightroom panorama merge).
+  GEOG 262 Virtual Field Trip. Open with  pano.html?p=Orere_pano
+  To add a panorama: upload the JPEG to the repo, then add an entry to PANOS below.
+  Label positions are fractions of the image width (0 = left edge, 1 = right edge) and height (0 = top, 1 = bottom).
+-->
+<style>
+:root{color-scheme:light;--ink:#0b0b0b;--ink-2:#52514e;--line:#dcdad3;--surface:#fcfcfb;--surface-2:#efeee9;--accent:#1f3a4d}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:#1b1b19;color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;display:flex;flex-direction:column}
+.bar{background:var(--surface);border-bottom:1px solid var(--line);padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.bar h1{font-size:15px;margin:0;font-weight:650}
+.bar .hint{color:var(--ink-2);font-size:13px;flex:1 1 220px}
+.btn{font:inherit;font-size:13.5px;padding:6px 11px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:focus-visible{outline:2px solid #2c5470;outline-offset:2px}
+.view{position:relative;flex:1 1 auto;min-height:220px;overflow:hidden;touch-action:none;cursor:grab}
+.view.drag{cursor:grabbing}
+canvas{display:block;width:100%;height:100%}
+.ctl{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px}
+.ctl button{width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.35);background:rgba(20,20,18,.72);color:#fff;font:600 17px/1 system-ui,sans-serif;cursor:pointer}
+.side{position:absolute;top:50%;transform:translateY(-50%);width:40px;height:64px;border:0;border-radius:8px;background:rgba(20,20,18,.55);color:#fff;font:600 22px/1 system-ui,sans-serif;cursor:pointer}
+.side.l{left:8px}.side.r{right:8px}
+.deg{position:absolute;left:10px;bottom:9px;font:12px ui-monospace,Menlo,Consolas,monospace;color:#fff;background:rgba(15,15,13,.66);padding:3px 8px;border-radius:6px;pointer-events:none}
+.list{background:var(--surface);border-top:1px solid var(--line);padding:8px 12px;display:none;flex-wrap:wrap;gap:6px}
+.list.on{display:flex}
+.list .btn{font-size:13px;padding:4px 9px}
+.msg{position:absolute;inset:0;display:grid;place-items:center;color:#ddd;text-align:center;padding:20px}
+</style>
+</head>
+<body>
+<div class="bar">
+  <h1 id="title">Panorama</h1>
+  <span class="hint">Drag, swipe or use the arrows to look all the way around. Scroll or + / − to zoom.</span>
+  <button class="btn" id="labelsBtn" aria-pressed="false">Show labels</button>
+</div>
+<div class="view" id="view">
+  <canvas id="cv" aria-label="360 degree panorama. Drag to look around."></canvas>
+  <button class="side l" data-pan="-1" aria-label="Look left">‹</button>
+  <button class="side r" data-pan="1" aria-label="Look right">›</button>
+  <div class="ctl"><button data-z="1.4" aria-label="Zoom in">+</button><button data-z="0.714" aria-label="Zoom out">−</button></div>
+  <div class="deg" id="deg"></div>
+  <div class="msg" id="msg">Loading panorama…</div>
+</div>
+<div class="list" id="list"></div>
+
+<script>
+(() => {
+'use strict';
+const PANOS = {
+  Orere_pano: {
+    title: 'Orere Point — river mouth and beach (360°)',
+    src: 'Orere_pano.jpg',
+    labels: [
+      { x: 0.03, y: 0.36, t: 'Firth of Thames' },
+      { x: 0.17, y: 0.62, t: 'River channels spreading across the beach to the sea' },
+      { x: 0.40, y: 0.70, t: 'Gravel bar in the river mouth' },
+      { x: 0.43, y: 0.47, t: 'Gravel spit and beach ridge' },
+      { x: 0.585, y: 0.64, t: 'Orere River (flowing to the left, towards the sea)' },
+      { x: 0.73, y: 0.70, t: 'Car park' },
+      { x: 0.945, y: 0.53, t: 'Towards the cliff section (Task A)' },
+    ]
+  },
+};
+
+const $ = s => document.querySelector(s);
+const qs = new URLSearchParams(location.search);
+const key = qs.get('p') && PANOS[qs.get('p')] ? qs.get('p') : Object.keys(PANOS)[0];
+const P = PANOS[key];
+$('#title').textContent = P.title; document.title = P.title;
+
+const cv = $('#cv'), ctx = cv.getContext('2d'), view = $('#view');
+let img = null, W = 0, H = 0, dpr = 1, z = 1, off = 0, yoff = 0, showLabels = false, anim = 0;
+// off: image-x (in source px) at the left edge of the view
+
+function size() { W = view.clientWidth; H = view.clientHeight; dpr = devicePixelRatio || 1; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); clampY(); draw(); }
+const scale = () => img ? (H / img.naturalHeight) * z : 1;            // screen px per image px
+const IW = () => img.naturalWidth;
+function clampY() { if (!img) return; const s = scale(), maxY = Math.max(0, img.naturalHeight - H / s); yoff = Math.min(Math.max(yoff, 0), maxY); }
+function wrap(x) { const w = IW(); return ((x % w) + w) % w; }
+function draw() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#1b1b19'; ctx.fillRect(0, 0, W, H);
+  if (!img) return;
+  const s = scale(), w = IW() * s;
+  off = wrap(off);
+  let x = -off * s; const y = -yoff * s;
+  ctx.imageSmoothingQuality = 'high';
+  while (x < W) { ctx.drawImage(img, x, y, w, img.naturalHeight * s); x += w; }
+  if (showLabels) P.labels.forEach(L => {
+    const base = wrap(L.x * IW() - off) * s, ly = (L.y * img.naturalHeight - yoff) * s;
+    for (const lx of [base, base - w, base + w]) if (lx > -10 && lx < W + 10) label(L.t, lx, ly);
+  });
+  const deg = Math.round(wrap(off + (W / 2) / s) / IW() * 360);
+  $('#deg').textContent = `${deg}° of 360°`;
+}
+function label(t, x, y) {
+  ctx.font = '600 13.5px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif';
+  const pad = 7, tw = ctx.measureText(t).width, bw = tw + pad * 2, bh = 26;
+  let bx = Math.min(Math.max(x - bw / 2, 4), W - bw - 4); const by = Math.max(4, y - 44);
+  ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, by + bh); ctx.lineTo(x, y); ctx.stroke();
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x, by + bh); ctx.lineTo(x, y); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fillStyle = '#fff'; ctx.fill(); ctx.beginPath(); ctx.arc(x, y, 3.2, 0, 7); ctx.fillStyle = '#111'; ctx.fill();
+  ctx.fillStyle = 'rgba(15,15,13,.82)'; roundRect(bx, by, bw, bh, 6); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(t, bx + pad, by + bh / 2 + 0.5);
+}
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+function zoomAt(f, cx) { if (!img) return; const s0 = scale(), ix = off + cx / s0, iy = yoff + (H / 2) / s0; z = Math.min(Math.max(z * f, 1), 4); const s = scale(); off = ix - cx / s; yoff = iy - (H / 2) / s; clampY(); draw(); }
+function panTo(target) { cancelAnimationFrame(anim); const start = off, w = IW(); let d = wrap(target - start); if (d > w / 2) d -= w; const t0 = performance.now();
+  const step = t => { const k = Math.min(1, (t - t0) / 500), e = 1 - Math.pow(1 - k, 3); off = start + d * e; draw(); if (k < 1) anim = requestAnimationFrame(step); }; anim = requestAnimationFrame(step); }
+
+let drag = null;
+view.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; view.setPointerCapture(e.pointerId); drag = { x: e.clientX, y: e.clientY, off, yoff }; view.classList.add('drag'); cancelAnimationFrame(anim); });
+view.addEventListener('pointermove', e => { if (!drag || !img) return; const s = scale(); off = drag.off - (e.clientX - drag.x) / s; yoff = drag.yoff - (e.clientY - drag.y) / s; clampY(); draw(); });
+const end = () => { drag = null; view.classList.remove('drag'); };
+view.addEventListener('pointerup', end); view.addEventListener('pointercancel', end);
+view.addEventListener('wheel', e => { e.preventDefault(); const r = cv.getBoundingClientRect(); zoomAt(Math.pow(1.0018, -e.deltaY), e.clientX - r.left); }, { passive: false });
+document.addEventListener('click', e => {
+  const zb = e.target.closest('[data-z]'); if (zb) { zoomAt(Number(zb.dataset.z), W / 2); return; }
+  const pb = e.target.closest('[data-pan]'); if (pb && img) { panTo(off + Number(pb.dataset.pan) * (W * 0.4) / scale()); return; }
+  const lb = e.target.closest('[data-go]'); if (lb && img) { const L = P.labels[Number(lb.dataset.go)]; panTo(L.x * IW() - (W / 2) / scale()); return; }
+});
+addEventListener('keydown', e => { if (!img) return; if (e.key === 'ArrowLeft') panTo(off - (W * 0.25) / scale()); if (e.key === 'ArrowRight') panTo(off + (W * 0.25) / scale()); });
+$('#labelsBtn').addEventListener('click', e => { showLabels = !showLabels; e.target.setAttribute('aria-pressed', showLabels); e.target.textContent = showLabels ? 'Hide labels' : 'Show labels'; $('#list').classList.toggle('on', showLabels); size(); });
+$('#list').innerHTML = '<span style="font-size:13px;color:#52514e;align-self:center">Go to:</span>' + P.labels.map((L, i) => `<button class="btn" data-go="${i}">${L.t.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</button>`).join('');
+
+const im = new Image();
+im.onload = () => { img = im; $('#msg').style.display = 'none'; off = 0; size(); };
+im.onerror = () => { $('#msg').textContent = `Panorama not found (${P.src}).`; };
+im.src = P.src;
+addEventListener('resize', size);
+if ('ResizeObserver' in window) new ResizeObserver(size).observe(view);
+size();
+})();
+</script>
+</body>
+</html>
