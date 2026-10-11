@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beach Profile Builder</title>
+<!--
+  Beach Profile Builder — turns dumpy (engineer's) level readings into beach profiles.
+  Part of the GEOG 262 Virtual Field Trip (Firth of Thames). Runs entirely in the browser.
+
+  Open a particular stop with  profile.html?stop=A2  (A2 = Waharau, A3 = Kaiaua, A4 = Taramaire).
+
+  FIELD DATA below: one group's dumpy-level survey from 11 October 2025, and a second group's
+  Abney-level profiles (digitised from their plotted graph) for comparison.
+-->
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f4f3ef; --surface:#fcfcfb; --surface-2:#efeee9; --line:#dcdad3; --grid:#e6e4de;
+  --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#77766f;
+  --accent:#1f3a4d; --accent-2:#2c5470;
+  --warn-bg:#fff1d6; --warn-ink:#6b4300; --ok-bg:#e1f1e6; --ok-ink:#1d5a32; --sel:#e6eef8;
+  --r:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.app{max-width:1100px;margin:0 auto;padding:14px 16px 28px}
+header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px 20px;flex-wrap:wrap;margin-bottom:12px}
+h1{font-size:22px;line-height:1.2;margin:0;letter-spacing:-.01em}
+.sub{margin:3px 0 0;color:var(--ink-2);font-size:14px}
+.namebox label{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink-2)}
+input[type=text],input[type=number],select{font:inherit;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 9px}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
+nav.steps{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 6px}
+.step-btn{display:flex;align-items:center;gap:8px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 13px 5px 5px;font:inherit;font-size:14px;cursor:pointer}
+.step-btn .n{width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);font-weight:650;font-size:13px}
+.step-btn[aria-current=step]{background:var(--accent);border-color:var(--accent);color:#fff}
+.step-btn[aria-current=step] .n{background:#fff;color:var(--accent)}
+.stopbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:10px 0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.seg button{font:inherit;font-size:14px;border:0;background:transparent;padding:7px 12px;cursor:pointer;color:var(--ink)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed=true]{background:var(--accent);color:#fff}
+.panel{display:none;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px 18px}
+.panel.on{display:block}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel h3{font-size:14px;margin:18px 0 6px}
+.panel p{margin:6px 0}
+.muted{color:var(--ink-2)} .small{font-size:13px}
+.btn{font:inherit;font-size:14px;line-height:1.2;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.sm{font-size:12.5px;padding:4px 9px}
+.btns{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.calc{font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--surface-2);border-radius:8px;padding:9px 11px;margin:8px 0;white-space:pre-wrap;overflow-x:auto}
+.note{font-size:13.5px;background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:8px 0}
+.flag{display:inline-block;background:var(--warn-bg);color:var(--warn-ink);border-radius:6px;padding:1px 6px;font-size:12px;font-weight:550}
+.ok{display:inline-block;background:var(--ok-bg);color:var(--ok-ink);border-radius:6px;padding:1px 6px;font-size:12px;font-weight:550}
+.flagbox{background:var(--warn-bg);color:var(--warn-ink);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13.5px}
+.okbox{background:var(--ok-bg);color:var(--ok-ink);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13.5px}
+.tablewrap{border:1px solid var(--line);border-radius:8px;overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:5px 8px;border-bottom:1px solid var(--grid);text-align:right;vertical-align:middle}
+th:first-child,td:first-child,td.l,th.l{text-align:left}
+thead th{background:var(--surface-2);color:var(--ink-2);font-weight:600;font-size:12.5px}
+tbody tr.hl td{background:var(--sel)}
+td input{width:86px;text-align:right;padding:4px 6px;font-variant-numeric:tabular-nums}
+td input.note-in{width:160px;text-align:left}
+.tablehead{display:flex;justify-content:space-between;align-items:flex-end;gap:8px;margin:16px 0 6px}
+.tablehead h3{margin:0}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:8px 0;font-size:14px}
+.kv dt{color:var(--ink-2)} .kv dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+.chart{width:100%;height:auto;display:block}
+.legendbar{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--ink-2);margin:6px 0}
+.key{display:inline-flex;align-items:center;gap:6px}
+.key svg{flex:0 0 auto}
+.row{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:8px 0}
+.row label{display:inline-flex;gap:8px;align-items:center}
+.diagram{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.diagram svg{flex:0 0 auto}
+details{margin-top:12px} details summary{cursor:pointer;color:var(--ink-2);font-size:14px}
+#tip{position:fixed;z-index:50;pointer-events:none;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.14);padding:7px 10px;font-size:13px;display:none;max-width:300px}
+#tip .t{color:var(--ink-2);font-size:12px;margin-bottom:3px}
+#tip .r{font-variant-numeric:tabular-nums}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;place-items:center;z-index:60;padding:16px}
+#modal .box{background:#fff;border-radius:12px;padding:16px;max-width:640px;width:100%}
+#modal textarea{width:100%;height:260px;font:12px ui-monospace,Menlo,Consolas,monospace;border:1px solid var(--line);border-radius:8px;padding:8px}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;font-size:14px;z-index:70;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.print-only{display:none}
+@media print{
+  @page{margin:14mm}
+  body{background:#fff;font-size:10.5pt}
+  .app{padding:0;max-width:none}
+  .no-print,nav.steps,.stopbar,.toast,#tip,#modal,.panel{display:none!important}
+  .print-only{display:block}
+  .tablewrap{border:0;overflow:visible}
+  tr,.chart,.calc{break-inside:avoid}
+  h2,h3{break-after:avoid}
+  .pstop{break-before:page}
+  .calc,.note{border:1px solid #ccc}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>Beach profile builder</h1>
+      <p class="sub">Turn dumpy-level readings into beach profiles — Firth of Thames virtual field trip.</p>
+    </div>
+    <div class="namebox no-print"><label>Your name <input type="text" id="student" autocomplete="off" placeholder="First and last name" size="22"></label></div>
+  </header>
+
+  <div class="print-only" id="printOut"></div>
+
+  <nav class="steps no-print" id="nav" aria-label="Steps"></nav>
+  <div class="stopbar no-print" id="stopbar">
+    <span class="muted">Stop:</span>
+    <span class="seg" id="stopSeg" role="group" aria-label="Choose a stop"></span>
+    <span class="small muted" id="stopNote"></span>
+  </div>
+
+  <section class="panel" data-step="1">
+    <h2>1 · The field book</h2>
+    <div class="diagram">
+      <svg width="250" height="150" viewBox="0 0 250 150" role="img" aria-label="Looking through a dumpy level at a staff: three crosshairs give an upper, middle and lower reading.">
+        <circle cx="75" cy="75" r="64" fill="#fff" stroke="#52514e" stroke-width="2"/>
+        <rect x="58" y="12" width="34" height="126" fill="#fff3c4" stroke="#b9a35a"/>
+        <g font-size="9" fill="#6b5a1e" font-family="system-ui,sans-serif">
+          <text x="62" y="30">1.3</text><text x="62" y="62">1.2</text><text x="62" y="94">1.1</text><text x="62" y="126">1.0</text>
+        </g>
+        <g stroke="#0b0b0b" stroke-width="1.5"><line x1="20" y1="53" x2="130" y2="53"/><line x1="20" y1="75" x2="130" y2="75"/><line x1="20" y1="97" x2="130" y2="97"/><line x1="75" y1="15" x2="75" y2="135"/></g>
+        <g font-size="12" fill="#0b0b0b" font-family="system-ui,sans-serif">
+          <text x="146" y="57">upper hair</text><text x="146" y="79" font-weight="700">middle hair</text><text x="146" y="101">lower hair</text>
+        </g>
+      </svg>
+      <div style="flex:1 1 300px">
+        <p class="muted">Looking through the level, you see three horizontal lines (hairs) on the staff. For each staff position the group booked all three readings, in metres.</p>
+        <ul class="small muted" style="margin:6px 0;padding-left:18px">
+          <li><b>Middle</b> reading → how far the ground is below the level's line of sight. A <i>bigger</i> number means <i>lower</i> ground.</li>
+          <li><b>Upper − lower</b> → how far away the staff is (Step 3).</li>
+          <li>Station 0 is the staff held right next to the level. The transect runs from the top of the beach down to the water's edge.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="tablehead"><h3 id="fbTitle">Field book</h3>
+      <div class="btns no-print"><button class="btn sm" data-act="addRow">+ Add station</button><button class="btn sm" data-act="delRow">Remove last</button><button class="btn sm" data-act="resetStop">Reset to class data</button><button class="btn sm" data-copy="t1">Copy table</button></div></div>
+    <div class="tablewrap"><table id="t1"></table></div>
+    <p class="small muted">These are real readings from a group on the 11 October 2025 trip. You can type over them with your own group's readings — your changes are saved in this browser.</p>
+  </section>
+
+  <section class="panel" data-step="2">
+    <h2>2 · Check the readings</h2>
+    <p class="muted">The middle hair sits exactly halfway between the upper and lower hairs, so the middle reading should equal the average of the other two. This is how surveyors catch reading or booking mistakes in the field.</p>
+    <div id="out2"></div>
+  </section>
+
+  <section class="panel" data-step="3">
+    <h2>3 · Work out the distances</h2>
+    <p class="muted">The gap between the upper and lower hairs looks bigger on a close staff and smaller on a far one. The level is built so that <b>distance = 100 × (upper − lower)</b>. This is called stadia distance.</p>
+    <div id="out3"></div>
+  </section>
+
+  <section class="panel" data-step="4">
+    <h2>4 · Work out the heights</h2>
+    <p class="muted">The level's line of sight is perfectly flat, so the difference between two middle readings is the difference in ground height. We measure every height from the water's edge, so the water's edge is 0 m.</p>
+    <div class="row"><label>Which station is at the water's edge? <select id="waterSel"></select></label></div>
+    <div id="out4"></div>
+  </section>
+
+  <section class="panel" data-step="5">
+    <h2>5 · Draw the profile and measure the beach face</h2>
+    <div id="out5a"></div>
+    <div class="row no-print"><label>Top of beach face <select id="topSel"></select></label><label>Bottom of beach face <select id="botSel"></select></label></div>
+    <div id="out5b"></div>
+  </section>
+
+  <section class="panel" data-step="6">
+    <h2>6 · Compare the three beaches</h2>
+    <div class="row no-print"><label><input type="checkbox" id="showAbney"> Also show another group's profiles, measured with an Abney level</label></div>
+    <div id="out6"></div>
+  </section>
+
+  <section class="panel" data-step="7">
+    <h2>7 · Hand in your work</h2>
+    <div id="out7"></div>
+  </section>
+</div>
+
+<div id="tip" role="tooltip"></div>
+<div id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="box">
+  <h2 id="modalTitle" style="font-size:16px;margin:0 0 6px">Copy this text</h2>
+  <p class="small muted" style="margin:0 0 8px">Your browser blocked automatic copying. The text is selected — press Ctrl+C (or ⌘C), then paste it into your spreadsheet.</p>
+  <textarea id="modalText" readonly></textarea>
+  <div style="text-align:right;margin-top:8px"><button class="btn" data-act="closeModal">Close</button></div></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- field data ---------- */
+const STOPS = {
+  A2: { name: 'Waharau', code: 'A2/B5', place: 'Beach south of Waharau Stream mouth', color: '#2a78d6',
+    rows: [['0', '', '1.55', '', 'staff at the level'], ['1', '1.635', '1.615', '1.595', ''], ['2', '1.25', '1.215', '1.18', ''], ['3', '1.03', '0.985', '0.92', ''], ['4', '0.84', '0.775', '0.715', ''], ['5', '1.11', '1.05', '0.98', ''], ['6', '1.42', '1.34', '1.27', ''], ['7', '1.73', '1.64', '1.57', 'water’s edge']],
+    abney: [[0, 0], [0.84, 0.34], [1.65, 0.21], [4.17, 0.60], [6.24, 1.35], [7.96, 1.25]] },
+  A3: { name: 'Kaiaua', code: 'A3/B4', place: 'Kaiaua Beach (lunch stop)', color: '#eb6834',
+    rows: [['0', '', '1.68', '', 'staff at the level'], ['1', '1.6475', '1.635', '1.6275', ''], ['2', '1.835', '1.815', '1.795', ''], ['3', '2.68', '2.63', '2.575', ''], ['4', '2.5775', '2.525', '2.47', ''], ['5', '2.86', '2.8', '2.74', ''], ['6', '3.71', '3.61', '3.51', ''], ['7', '3.96', '3.75', '3.54', 'water’s edge']],
+    abney: [[0, 0], [10.21, 0.54], [14.14, 1.38], [15.31, 1.87], [16.08, 1.83], [20.44, 2.76], [22.91, 2.50]] },
+  A4: { name: 'Taramaire', code: 'A4/B3', place: 'Beach north of Taramaire Stream', color: '#1baf7a',
+    rows: [['0', '', '1.717', '', 'staff at the level'], ['1', '1.815', '1.795', '1.775', ''], ['2', '2.21', '2.165', '2.12', ''], ['3', '2.555', '2.495', '2.44', ''], ['4', '2.54', '2.48', '2.415', ''], ['5', '2.715', '2.645', '2.58', ''], ['6', '3.58', '3.475', '3.37', ''], ['7', '4.375', '4.2', '4.061', 'water’s edge']],
+    abney: [[0, 0], [11.11, 2.97], [11.53, 3.10], [11.99, 3.13], [17.78, 3.95], [18.56, 3.94]] }
+};
+const ORDER = ['A2', 'A3', 'A4'];
+const STEPS = ['Field book', 'Check', 'Distances', 'Heights', 'Profile & slope', 'Compare beaches', 'Hand in'];
+const TOL = 0.005; // m — booking check tolerance
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nf = (v, d = 2) => (v == null || !isFinite(v)) ? '–' : v.toLocaleString('en-NZ', { minimumFractionDigits: d, maximumFractionDigits: d });
+const num = s => { const v = parseFloat(String(s).replace(',', '.')); return isFinite(v) ? v : NaN; };
+const deg = r => r * 180 / Math.PI;
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
+
+/* ---------- state ---------- */
+function freshStop(k) { const rows = STOPS[k].rows.map(r => r.slice()); return { rows, water: rows.length - 1, top: null, bot: null }; }
+function fresh() { const s = { v: 1, stop: 'A2', showAbney: false, stops: {} }; ORDER.forEach(k => s.stops[k] = freshStop(k)); return s; }
+let S = fresh();
+try { const s = JSON.parse(store.get('beachprofile:v1')); if (s && s.v === 1) { S = Object.assign(fresh(), s); ORDER.forEach(k => { if (!S.stops[k]) S.stops[k] = freshStop(k); }); } } catch (e) { }
+const qs = new URLSearchParams(location.search); if (STOPS[qs.get('stop')]) S.stop = qs.get('stop');
+let step = 1;
+function save() { store.set('beachprofile:v1', JSON.stringify(S)); }
+
+/* ---------- calculations ---------- */
+function reduce(k) {
+  const st = S.stops[k];
+  const rows = st.rows.map((r, i) => {
+    const u = num(r[1]), m = num(r[2]), l = num(r[3]);
+    const hasStadia = isFinite(u) && isFinite(l);
+    const d = hasStadia ? 100 * (u - l) : (i === 0 ? 0 : NaN);
+    const avg = hasStadia ? (u + l) / 2 : NaN;
+    const diff = hasStadia && isFinite(m) ? m - avg : NaN;
+    return { i, st: r[0] || String(i), u, m, l, note: r[4] || '', hasStadia, d, avg, diff, bad: isFinite(diff) && Math.abs(diff) > TOL + 1e-9 };
+  });
+  const w = Math.min(Math.max(st.water, 0), rows.length - 1);
+  const W = rows[w];
+  rows.forEach(r => { r.z = (isFinite(W.m) && isFinite(r.m)) ? W.m - r.m : NaN; r.x = (isFinite(W.d) && isFinite(r.d)) ? W.d - r.d : NaN; });
+  const valid = rows.filter(r => isFinite(r.x) && isFinite(r.z));
+  let top = st.top, bot = st.bot;
+  if (top == null || top >= rows.length || !isFinite(rows[top].z)) { let best = -1, bz = -Infinity; rows.forEach(r => { if (isFinite(r.z) && r.z > bz) { bz = r.z; best = r.i; } }); top = best; }
+  if (bot == null || bot >= rows.length || !isFinite(rows[bot].z)) bot = w;
+  let face = null;
+  if (top >= 0 && bot >= 0 && top !== bot) {
+    const T = rows[top], B = rows[bot]; const width = Math.abs(T.x - B.x), dz = T.z - B.z;
+    face = { T, B, width, dz, slope: width > 0 ? deg(Math.atan(Math.abs(dz) / width)) : NaN };
+  }
+  const pts = valid.slice().sort((a, b) => a.x - b.x);
+  const segs = [];
+  for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i], dx = b.x - a.x, dz = b.z - a.z; segs.push({ a, b, dx, dz, slope: dx > 0 ? deg(Math.atan(dz / dx)) : NaN }); }
+  const maxZ = valid.length ? Math.max(...valid.map(r => r.z)) : NaN;
+  const len = valid.length ? Math.max(...valid.map(r => r.x)) - Math.min(...valid.map(r => r.x)) : NaN;
+  return { k, rows, w, W, pts, segs, top, bot, face, maxZ, len, bad: rows.filter(r => r.bad).length };
+}
+
+/* ---------- charts ---------- */
+function niceStep(range, target) { const raw = range / target, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p; }
+function profileChart(series, opt = {}) {
+  const W = 760, m = { l: 52, r: 16, t: 14, b: 46 };
+  let xmax = 0, zmin = 0, zmax = 0;
+  series.forEach(s => s.pts.forEach(p => { xmax = Math.max(xmax, p.x); zmin = Math.min(zmin, p.z); zmax = Math.max(zmax, p.z); }));
+  xmax = opt.xmax || Math.ceil((xmax * 1.04 + 0.5) / 5) * 5; zmax = opt.zmax || Math.ceil((zmax + 0.25) * 2) / 2; zmin = opt.zmin != null ? opt.zmin : Math.floor((zmin - 0.1) * 2) / 2;
+  const pw = W - m.l - m.r; const ve = opt.ve || 5;
+  const pxm = pw / xmax; let ph = (zmax - zmin) * pxm * ve; ph = Math.max(120, Math.min(ph, 420));
+  const veReal = (ph / (zmax - zmin)) / pxm;
+  const H = ph + m.t + m.b;
+  const X = x => m.l + x / xmax * pw, Y = z => m.t + (zmax - z) / (zmax - zmin) * ph;
+  let g = '';
+  const xs = niceStep(xmax, 8), zs = niceStep(zmax - zmin, 5);
+  for (let k = Math.ceil(zmin / zs - 1e-9); k * zs <= zmax + 1e-9; k++) { const z = k * zs || 0; g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(z)}" y2="${Y(z)}" stroke="${Math.abs(z) < 1e-9 ? '#b9b7b0' : '#e6e4de'}"/><text x="${m.l - 7}" y="${Y(z)}" text-anchor="end" dominant-baseline="middle" font-size="12" fill="#52514e">${nf(z, zs < 1 ? 1 : 0)}</text>`; }
+  for (let x = 0; x <= xmax + 1e-9; x += xs) g += `<line x1="${X(x)}" x2="${X(x)}" y1="${m.t}" y2="${m.t + ph}" stroke="#e6e4de"/><text x="${X(x)}" y="${m.t + ph + 16}" text-anchor="middle" font-size="12" fill="#52514e">${nf(x, 0)}</text>`;
+  g += `<text x="${m.l + pw / 2}" y="${H - 8}" text-anchor="middle" font-size="12.5" fill="#52514e">Distance from the water's edge (m)  ·  sea ← → land</text>`;
+  g += `<text transform="translate(13 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle" font-size="12.5" fill="#52514e">Height above water's edge (m)</text>`;
+  g += `<text x="${m.l + 8}" y="${m.t + 15}" font-size="11.5" fill="#52514e" stroke="#fcfcfb" stroke-width="3" paint-order="stroke">vertical exaggeration ×${nf(veReal, 1)}</text>`;
+  if (opt.face) {
+    const f = opt.face; g += `<line x1="${X(f.T.x)}" y1="${Y(f.T.z)}" x2="${X(f.B.x)}" y2="${Y(f.B.z)}" stroke="#0b0b0b" stroke-width="7" stroke-opacity=".13" stroke-linecap="round"/>`;
+  }
+  series.forEach(s => {
+    const pts = s.pts.slice().sort((a, b) => a.x - b.x);
+    g += `<polyline points="${pts.map(p => X(p.x) + ',' + Y(p.z)).join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"${s.dash ? ' stroke-dasharray="6 4"' : ''}/>`;
+    pts.forEach(p => {
+      g += s.dash ? `<rect x="${X(p.x) - 4}" y="${Y(p.z) - 4}" width="8" height="8" fill="#fcfcfb" stroke="${s.color}" stroke-width="2"/>`
+        : `<circle cx="${X(p.x)}" cy="${Y(p.z)}" r="4.5" fill="${s.color}" stroke="#fcfcfb" stroke-width="2"/>`;
+      if (opt.labels && p.label != null) g += `<text x="${X(p.x)}" y="${Y(p.z) - 10}" text-anchor="middle" font-size="11" fill="#52514e" stroke="#fcfcfb" stroke-width="3" paint-order="stroke">${esc(p.label)}</text>`;
+      const tip = JSON.stringify({ t: `${s.label}${p.label != null ? ' · station ' + p.label : ''}`, r: [`${nf(p.x, 2)} m from water's edge`, `${nf(p.z, 2)} m above water's edge`] });
+      g += `<circle cx="${X(p.x)}" cy="${Y(p.z)}" r="11" fill="transparent" data-tip='${esc(tip)}'/>`;
+    });
+  });
+  if (opt.face) {
+    const f = opt.face;
+    for (const [P, t] of [[f.T, 'top'], [f.B, 'bottom']]) { const right = X(P.x) > m.l + pw * 0.6; g += `<text x="${X(P.x) + (right ? -10 : 10)}" y="${Y(P.z) + (t === 'top' ? -22 : 20)}" text-anchor="${right ? 'end' : 'start'}" font-size="11.5" font-weight="650" fill="#0b0b0b" stroke="#fcfcfb" stroke-width="3" paint-order="stroke">${t === 'top' ? 'top of beach face' : 'bottom of beach face'}</text>`; }
+  }
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opt.aria || 'Beach profile')}" font-family="system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">${g}</svg>`;
+}
+function legend(items) {
+  return `<div class="legendbar">${items.map(i => `<span class="key"><svg width="26" height="10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" stroke="${i.color}" stroke-width="2.5"${i.dash ? ' stroke-dasharray="5 3"' : ''}/></svg>${esc(i.label)}</span>`).join('')}</div>`;
+}
+
+/* ---------- rendering ---------- */
+function renderNav() {
+  $('#nav').innerHTML = STEPS.map((t, i) => `<button type="button" class="step-btn" data-step="${i + 1}" ${i + 1 === step ? 'aria-current="step"' : ''}><span class="n">${i + 1}</span>${t}</button>`).join('');
+  $('#stopSeg').innerHTML = ORDER.map(k => `<button type="button" data-stop="${k}" aria-pressed="${k === S.stop}">${STOPS[k].name} <span class="small" style="opacity:.75">${STOPS[k].code}</span></button>`).join('');
+  $('#stopbar').style.display = step === 6 || step === 7 ? 'none' : '';
+  $('#stopNote').textContent = STOPS[S.stop].place;
+}
+function stationOpts(R, sel) { return R.rows.map(r => `<option value="${r.i}"${r.i === sel ? ' selected' : ''}>Station ${esc(r.st)}</option>`).join(''); }
+function render1() {
+  const st = S.stops[S.stop];
+  $('#fbTitle').textContent = `Field book — ${STOPS[S.stop].name} (${STOPS[S.stop].code})`;
+  $('#t1').innerHTML = `<thead><tr><th>Station</th><th>Upper (m)</th><th>Middle (m)</th><th>Lower (m)</th><th class="l">Notes</th></tr></thead><tbody>` +
+    st.rows.map((r, i) => `<tr><td>${esc(r[0])}</td>${[1, 2, 3].map(c => `<td><input type="text" inputmode="decimal" data-cell="${i},${c}" value="${esc(r[c])}" aria-label="Station ${esc(r[0])} ${['', 'upper', 'middle', 'lower'][c]}"></td>`).join('')}<td class="l"><input type="text" class="note-in" data-cell="${i},4" value="${esc(r[4])}" aria-label="Station ${esc(r[0])} notes"></td></tr>`).join('') + '</tbody>';
+}
+function out2(R) {
+  const rows = R.rows.map(r => `<tr class="${r.bad ? 'hl' : ''}"><td>${esc(r.st)}</td><td>${nf(r.u, 3)}</td><td>${nf(r.l, 3)}</td><td>${nf(r.avg, 4)}</td><td>${nf(r.m, 3)}</td><td>${isFinite(r.diff) ? nf(r.diff * 1000, 1) : '–'}</td><td class="l">${!r.hasStadia ? '<span class="small muted">no upper/lower reading</span>' : r.bad ? '<span class="flag">⚠ check</span>' : '<span class="ok">✓</span>'}</td></tr>`).join('');
+  const ex = R.rows.find(r => r.hasStadia);
+  return `<div class="tablehead"><h3>Booking check</h3><button class="btn sm no-print" data-copy="t2">Copy table</button></div>
+  <div class="tablewrap"><table id="t2"><thead><tr><th>Station</th><th>Upper</th><th>Lower</th><th>(Upper + Lower) ÷ 2</th><th>Middle</th><th>Difference (mm)</th><th class="l">Check</th></tr></thead><tbody>${rows}</tbody></table></div>
+  ${ex ? `<h3>Working (station ${esc(ex.st)})</h3><div class="calc">(upper + lower) ÷ 2 = (${nf(ex.u, 3)} + ${nf(ex.l, 3)}) ÷ 2 = ${nf(ex.avg, 4)} m
+difference  = middle − average = ${nf(ex.m, 3)} − ${nf(ex.avg, 4)} = ${nf(ex.diff * 1000, 1)} mm</div>` : ''}
+  ${R.bad ? `<p class="flagbox">⚠ ${R.bad} station${R.bad > 1 ? 's differ' : ' differs'} by more than ${TOL * 1000} mm. In the field you would re-read the staff. Here, think about what a 1 cm error does to the heights in Step 4 — does it matter on a beach?</p>` : `<p class="okbox">✓ Every middle reading is within ${TOL * 1000} mm of the average.</p>`}`;
+}
+function out3(R) {
+  const rows = R.rows.map(r => `<tr><td>${esc(r.st)}</td><td>${nf(r.u, 3)}</td><td>${nf(r.l, 3)}</td><td>${r.hasStadia ? nf(r.u - r.l, 4) : '–'}</td><td>${nf(r.d, 2)}</td></tr>`).join('');
+  const ex = R.rows.find(r => r.hasStadia && r.i > 0) || R.rows.find(r => r.hasStadia);
+  return `<div class="tablehead"><h3>Distance from the level</h3><button class="btn sm no-print" data-copy="t3">Copy table</button></div>
+  <div class="tablewrap"><table id="t3"><thead><tr><th>Station</th><th>Upper</th><th>Lower</th><th>Upper − Lower</th><th>Distance (m)</th></tr></thead><tbody>${rows}</tbody></table></div>
+  ${ex ? `<h3>Working (station ${esc(ex.st)})</h3><div class="calc">distance = 100 × (upper − lower) = 100 × (${nf(ex.u, 3)} − ${nf(ex.l, 3)}) = 100 × ${nf(ex.u - ex.l, 4)} = ${nf(ex.d, 2)} m</div>` : ''}
+  <p class="note">Station 0 is the staff held next to the level, so its distance is 0 m. Reading each hair to the nearest millimetre gives distances to about ±0.1 m — good enough for a beach profile.</p>`;
+}
+function out4(R) {
+  const W = R.W;
+  const rows = R.rows.map(r => `<tr class="${r.i === R.w ? 'hl' : ''}"><td>${esc(r.st)}</td><td>${nf(r.m, 3)}</td><td>${nf(r.z, 3)}</td><td>${nf(r.d, 2)}</td><td>${nf(r.x, 2)}</td></tr>`).join('');
+  const ex = R.rows.find(r => r.i !== R.w && isFinite(r.z) && r.i > 0) || R.rows[0];
+  return `<div class="tablehead"><h3>Heights and distances from the water's edge</h3><button class="btn sm no-print" data-copy="t4">Copy table</button></div>
+  <div class="tablewrap"><table id="t4"><thead><tr><th>Station</th><th>Middle (m)</th><th>Height above water's edge (m)</th><th>Distance from level (m)</th><th>Distance from water's edge (m)</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <h3>Working (station ${esc(ex.st)})</h3><div class="calc">height   = middle at water's edge − middle at station ${esc(ex.st)} = ${nf(W.m, 3)} − ${nf(ex.m, 3)} = ${nf(ex.z, 3)} m
+distance = distance to water's edge − distance to station ${esc(ex.st)} = ${nf(W.d, 2)} − ${nf(ex.d, 2)} = ${nf(ex.x, 2)} m</div>
+  <p class="note">A smaller middle reading means higher ground: the line of sight is fixed, so on high ground less of the staff sits below it. Check that the highest point in your table has the smallest middle reading.</p>`;
+}
+function out5a(R) {
+  const pts = R.pts.map(r => ({ x: r.x, z: r.z, label: r.st }));
+  return profileChart([{ label: `${STOPS[S.stop].name} (dumpy level)`, color: STOPS[S.stop].color, pts }], { labels: true, face: R.face, aria: `Beach profile at ${STOPS[S.stop].name}` }) +
+    `<p class="small muted">Numbers are station numbers. The shaded line is the beach face you have chosen below. Hover over a point to see its values.</p>`;
+}
+function out5b(R) {
+  const f = R.face;
+  const segs = R.segs.map(s => `<tr><td>${esc(s.a.st)} → ${esc(s.b.st)}</td><td>${nf(s.dx, 2)}</td><td>${nf(s.dz, 3)}</td><td>${nf(s.slope, 1)}°</td></tr>`).join('');
+  return `${f ? `<h3>Beach face</h3>
+  <dl class="kv"><dt>Width</dt><dd>${nf(f.width, 2)} m</dd><dt>Height</dt><dd>${nf(Math.abs(f.dz), 2)} m</dd><dt>Slope</dt><dd>${nf(f.slope, 1)}°</dd></dl>
+  <div class="calc">width  = ${nf(f.T.x, 2)} − ${nf(f.B.x, 2)} = ${nf(f.width, 2)} m
+height = ${nf(f.T.z, 3)} − ${nf(f.B.z, 3)} = ${nf(Math.abs(f.dz), 3)} m
+slope  = tan⁻¹(height ÷ width) = tan⁻¹(${nf(Math.abs(f.dz), 3)} ÷ ${nf(f.width, 2)}) = ${nf(f.slope, 1)}°</div>` : '<p class="flagbox">Choose two different stations for the top and bottom of the beach face.</p>'}
+  <div class="tablehead"><h3>Slope of each section (from the sea, landward)</h3><button class="btn sm no-print" data-copy="t5">Copy table</button></div>
+  <div class="tablewrap"><table id="t5"><thead><tr><th>Stations</th><th>Horizontal (m)</th><th>Rise (m)</th><th>Slope</th></tr></thead><tbody>${segs}</tbody></table></div>
+  <p class="note">The <b>beach face</b> is the sloping part washed by the waves, from the water's edge up to the crest of the beach (berm or storm ridge). Use the table to decide where it starts and ends: it is usually the steepest continuous part. Negative slopes face inland — the back of a ridge.</p>`;
+}
+function out6() {
+  const Rs = ORDER.map(reduce);
+  const series = Rs.map(R => ({ label: `${STOPS[R.k].name} — dumpy level`, color: STOPS[R.k].color, pts: R.pts.map(r => ({ x: r.x, z: r.z, label: r.st })) }));
+  if (S.showAbney) ORDER.forEach(k => series.push({ label: `${STOPS[k].name} — Abney level (other group)`, color: STOPS[k].color, dash: true, pts: STOPS[k].abney.map(([x, z]) => ({ x, z })) }));
+  let xmax = 0, zmax = 0; series.forEach(s => s.pts.forEach(p => { xmax = Math.max(xmax, p.x); zmax = Math.max(zmax, p.z); }));
+  const chart = profileChart(series, { xmax: Math.ceil((xmax + 1) / 5) * 5, zmax: Math.ceil((zmax + 0.25) * 2) / 2, zmin: -0.5, aria: 'Beach profiles at Waharau, Kaiaua and Taramaire on the same axes' });
+  const rows = Rs.map(R => `<tr><td>${STOPS[R.k].name} (${STOPS[R.k].code})</td><td>${R.face ? nf(R.face.slope, 1) + '°' : '–'}</td><td>${R.face ? nf(R.face.width, 1) : '–'}</td><td>${nf(R.maxZ, 2)}</td><td>${nf(R.len, 1)}</td></tr>`).join('');
+  return `<p class="muted small">All three profiles on the same axes, so the shapes can be compared fairly. Waharau is the most northerly stop, Taramaire the most southerly.</p>
+  ${legend(series.map(s => ({ label: s.label, color: s.color, dash: s.dash })))}
+  ${chart}
+  <div class="tablehead"><h3>Summary (dumpy level)</h3><button class="btn sm no-print" data-copy="t6">Copy table</button></div>
+  <div class="tablewrap"><table id="t6"><thead><tr><th>Stop</th><th>Beach face slope</th><th>Beach face width (m)</th><th>Highest point above water (m)</th><th>Profile length (m)</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="small muted">Beach face values use the top and bottom stations you chose for each stop in Step 5.</p>
+  <h3>Think about</h3>
+  <ul class="small" style="padding-left:18px;margin:4px 0">
+    <li>How do the slope and width of the beach face change from north (Waharau) to south (Taramaire)? How does that match the change in grain size?</li>
+    <li>Why does Waharau have a ridge with a low area behind it?</li>
+    ${S.showAbney ? '<li>The Abney-level group got different profiles at the same beaches. List three reasons why (method, where the transect was placed, the tide when they measured).</li>' : '<li>Tick the box above to see another group’s profiles. Why might they differ from these?</li>'}
+  </ul>`;
+}
+function out7() {
+  const name = $('#student').value.trim();
+  return `<dl class="kv"><dt>Name</dt><dd>${name ? esc(name) : '<span class="flag">⚠ add your name at the top</span>'}</dd></dl>
+  <h3>Worked pages</h3><p class="small muted">Prints every step for all three stops, plus the comparison graph. In the print window choose <b>Save as PDF</b>.</p>
+  <button class="btn primary" data-act="print">Print / save worked pages as PDF</button>
+  <h3>Data for your own spreadsheet</h3><p class="small muted">All three stops: raw readings plus the distances and heights worked out here.</p>
+  <div class="btns"><button class="btn" data-act="csv">Download data (.csv)</button><button class="btn" data-act="copyCsv">Copy data</button></div>
+  <p class="small muted" style="margin-top:14px">Any changes you made to the field book are saved in this browser on this device.</p>`;
+}
+function update() {
+  save(); renderNav();
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', Number(p.dataset.step) === step));
+  const R = reduce(S.stop);
+  if (step === 1) render1();
+  $('#out2').innerHTML = out2(R); $('#out3').innerHTML = out3(R);
+  $('#waterSel').innerHTML = stationOpts(R, R.w); $('#out4').innerHTML = out4(R);
+  $('#topSel').innerHTML = stationOpts(R, R.top); $('#botSel').innerHTML = stationOpts(R, R.bot);
+  $('#out5a').innerHTML = out5a(R); $('#out5b').innerHTML = out5b(R);
+  $('#showAbney').checked = !!S.showAbney; $('#out6').innerHTML = out6(); $('#out7').innerHTML = out7();
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', e => {
+  const sb = e.target.closest('.step-btn'); if (sb) { step = Number(sb.dataset.step); update(); return; }
+  const so = e.target.closest('[data-stop]'); if (so) { S.stop = so.dataset.stop; update(); return; }
+  const cp = e.target.closest('[data-copy]'); if (cp) { copyText(tableTSV(document.getElementById(cp.dataset.copy)), 'Table copied — paste it into your spreadsheet.'); return; }
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const st = S.stops[S.stop];
+  switch (a.dataset.act) {
+    case 'addRow': st.rows.push([String(st.rows.length), '', '', '', '']); update(); break;
+    case 'delRow': if (st.rows.length > 2) { st.rows.pop(); st.water = Math.min(st.water, st.rows.length - 1); update(); } break;
+    case 'resetStop': if (confirm(`Put back the class data for ${STOPS[S.stop].name}? Your changes to this stop will be lost.`)) { S.stops[S.stop] = freshStop(S.stop); update(); } break;
+    case 'print': preparePrint(); setTimeout(() => window.print(), 60); break;
+    case 'csv': download(csvText(), 'beach-profiles.csv'); break;
+    case 'copyCsv': copyText(csvText(), 'Data copied — paste it into your spreadsheet.'); break;
+    case 'closeModal': $('#modal').style.display = 'none'; break;
+  }
+});
+document.addEventListener('change', e => {
+  const c = e.target.dataset && e.target.dataset.cell;
+  if (c) { const [i, j] = c.split(',').map(Number); S.stops[S.stop].rows[i][j] = e.target.value.trim(); save(); const R = reduce(S.stop); $('#out2').innerHTML = out2(R); return; }
+  if (e.target.id === 'waterSel') { S.stops[S.stop].water = Number(e.target.value); update(); }
+  if (e.target.id === 'topSel') { S.stops[S.stop].top = Number(e.target.value); update(); }
+  if (e.target.id === 'botSel') { S.stops[S.stop].bot = Number(e.target.value); update(); }
+  if (e.target.id === 'showAbney') { S.showAbney = e.target.checked; update(); }
+});
+$('#student').addEventListener('input', e => { store.set('pebblecount:student', e.target.value); if (step === 7) $('#out7').innerHTML = out7(); });
+
+/* tooltip */
+const tipEl = $('#tip');
+document.addEventListener('pointermove', e => {
+  const t = e.target.closest && e.target.closest('[data-tip]');
+  if (!t) { tipEl.style.display = 'none'; return; }
+  let d; try { d = JSON.parse(t.getAttribute('data-tip')); } catch (er) { return; }
+  tipEl.textContent = '';
+  const h = document.createElement('div'); h.className = 't'; h.textContent = d.t; tipEl.appendChild(h);
+  d.r.forEach(line => { const r = document.createElement('div'); r.className = 'r'; r.textContent = line; tipEl.appendChild(r); });
+  tipEl.style.display = 'block';
+  const w = tipEl.offsetWidth, hh = tipEl.offsetHeight;
+  let x = e.clientX + 14, y = e.clientY + 14;
+  if (x + w > innerWidth - 6) x = e.clientX - w - 14; if (y + hh > innerHeight - 6) y = e.clientY - hh - 14;
+  tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px';
+});
+
+/* ---------- output ---------- */
+function csvText() {
+  const L = ['stop,station,upper_m,middle_m,lower_m,distance_from_level_m,booking_check_mm,height_above_water_edge_m,distance_from_water_edge_m,notes'];
+  ORDER.forEach(k => reduce(k).rows.forEach(r => L.push([`${STOPS[k].name} ${STOPS[k].code}`, r.st, isFinite(r.u) ? r.u : '', isFinite(r.m) ? r.m : '', isFinite(r.l) ? r.l : '', isFinite(r.d) ? r.d.toFixed(2) : '', isFinite(r.diff) ? (r.diff * 1000).toFixed(1) : '', isFinite(r.z) ? r.z.toFixed(3) : '', isFinite(r.x) ? r.x.toFixed(2) : '', r.note].map(v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(','))));
+  return L.join('\r\n') + '\r\n';
+}
+function tableTSV(t) { return t ? [...t.querySelectorAll('tr')].map(r => [...r.children].map(c => { const i = c.querySelector('input'); return (i ? i.value : c.textContent).replace(/\s+/g, ' ').trim(); }).join('\t')).join('\n') : ''; }
+function copyText(text, msg) { const fb = () => showModal(text); if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(() => toast(msg), fb); else fb(); }
+function showModal(text) { const m = $('#modal'), t = $('#modalText'); t.value = text; m.style.display = 'grid'; t.focus(); t.select(); }
+function download(text, name) {
+  try { const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); toast('Download started: ' + name); }
+  catch (e) { showModal(text); }
+}
+let toastT = 0;
+function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3200); }
+function preparePrint() {
+  const name = $('#student').value.trim();
+  const d = new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' });
+  const keep = S.stop;
+  let h = `<h1 style="font-size:16pt;margin:0 0 4pt">Beach profiles — Firth of Thames</h1><p style="margin:0 0 10pt"><b>${name ? esc(name) : 'Name: ____________________'}</b> · ${d} · dumpy-level survey, 11 October 2025</p>`;
+  h += `<h2 style="font-size:13pt">All three beaches on the same axes</h2>${out6()}`;
+  ORDER.forEach(k => {
+    S.stop = k; const R = reduce(k);
+    h += `<div class="pstop"><h2 style="font-size:14pt;margin:0 0 6pt">${STOPS[k].name} (${STOPS[k].code}) — ${STOPS[k].place}</h2>
+      <h3>Check the readings</h3>${out2(R)}<h3>Distances</h3>${out3(R)}<h3>Heights</h3>${out4(R)}<h3>Profile and beach face</h3>${out5a(R)}${out5b(R)}</div>`;
+  });
+  S.stop = keep;
+  $('#printOut').innerHTML = h.replace(/ id="t\d+b?"/g, '');
+}
+window.addEventListener('beforeprint', () => { if (!$('#printOut').firstChild) preparePrint(); });
+window.addEventListener('afterprint', () => { $('#printOut').innerHTML = ''; });
+
+$('#student').value = store.get('pebblecount:student') || '';
+update();
+})();
+</script>
+</body>
+</html>

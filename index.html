@@ -215,20 +215,26 @@ details summary{cursor:pointer;color:var(--ink-2);font-size:14px}
 
       <section class="panel" data-step="3">
         <h2>3 · Place the sampling grid</h2>
-        <p class="muted">We measure only the stone under each grid point. That gives a fair, random-like sample — like a Wolman pebble count, but on a photo.</p>
+        <p class="muted">We record only what is under each grid point. That gives a fair, random-like sample — like a Wolman pebble count, but on a photo.</p>
+        <div class="row"><span class="muted">At each point, record</span>
+          <span class="seg" role="radiogroup" aria-label="What to record at each point">
+            <label><input type="radio" name="mode" value="size">Stone size</label>
+            <label><input type="radio" name="mode" value="type">What’s there</label>
+          </span></div>
+        <p class="small muted" id="modeNote"></p>
         <div class="row"><label>Grid spacing <input type="number" id="spacing" min="5" max="2000" step="5"> mm</label>
           <button class="btn primary no-print" type="button" data-act="grid">Make grid</button></div>
         <div id="out3"></div>
       </section>
 
       <section class="panel" data-step="4">
-        <h2>4 · Measure the stones</h2>
+        <h2 id="h4">4 · Measure the stones</h2>
         <div id="out4"></div>
       </section>
 
       <section class="panel" data-step="5">
-        <h2>5 · Sort into size classes</h2>
-        <div class="row no-print"><span class="muted">Use the</span>
+        <h2 id="h5">5 · Sort into size classes</h2>
+        <div class="row no-print" id="axisRow"><span class="muted">Use the</span>
           <span class="seg" role="radiogroup" aria-label="Axis">
             <label><input type="radio" name="axis" value="b">b-axis</label>
             <label><input type="radio" name="axis" value="a">a-axis</label>
@@ -285,6 +291,12 @@ const CLASS_NAMES = {
 };
 const COL = { a: '#eb6834', b: '#2a78d6', scale: '#1baf7a', ink: '#0b0b0b', ink2: '#52514e', ink3: '#77766f', grid: '#e6e4de', surface: '#fcfcfb' };
 const STEPS = ['Photo', 'Scale', 'Grid', 'Measure', 'Size classes', 'Curve & D-values', 'Hand in'];
+const STEPS_TYPE = ['Photo', 'Scale', 'Grid', 'Identify', 'Composition', 'Curve & D-values', 'Hand in'];
+const CATS = [
+  ['gw', 'Greywacke stone', 'G'], ['rock', 'Other rock', 'R'], ['shell', 'Shell', 'Sh'],
+  ['sand', 'Sand or finer', 'S'], ['other', 'Plant or other material', 'P']
+];
+const CAT = Object.fromEntries(CATS.map(c => [c[0], { label: c[1], ab: c[2] }]));
 
 /* ---------- helpers ---------- */
 const $ = s => document.querySelector(s);
@@ -308,7 +320,7 @@ let hover = null;                       // mouse position in image px
 let uploaded = null;                    // last uploaded photo entry
 let printing = false;
 function fresh() {
-  return { v: 1, capMM: DEFAULT_CAP, cal: [], spacingMM: DEFAULT_SPACING, grid: null, pts: [], active: -1, clicks: [], axis: 'b', autoZoom: true };
+  return { v: 1, capMM: DEFAULT_CAP, cal: [], spacingMM: DEFAULT_SPACING, grid: null, pts: [], active: -1, clicks: [], axis: 'b', autoZoom: true, mode: 'size' };
 }
 function save() { if (photo) store.set('pebblecount:' + photo.id, JSON.stringify(S)); }
 function load(id) {
@@ -317,6 +329,19 @@ function load(id) {
 }
 
 /* ---------- derived quantities ---------- */
+const typeMode = () => S.mode === 'type';
+const isDone = p => typeMode() ? p.cat != null : p.status !== 'todo';
+function meanAxes() {
+  const ci = calInfo(); if (!ci) return null;
+  const st = S.pts.filter(p => p.status === 'stone').map(p => ptInfo(p, ci.mmpp));
+  if (!st.length) return null;
+  return { n: st.length, a: mean(st.map(i => i.aMM)), b: mean(st.map(i => i.bMM)), sumA: st.reduce((s, i) => s + i.aMM, 0), sumB: st.reduce((s, i) => s + i.bMM, 0) };
+}
+function compTable() {
+  const used = S.pts.filter(p => p.cat && p.cat !== 'skip'); const n = used.length;
+  const rows = CATS.map(([k, label]) => { const count = used.filter(p => p.cat === k).length; return { k, label, count, pct: n ? count / n * 100 : 0 }; });
+  return { n, rows, skip: S.pts.filter(p => p.cat === 'skip').length, todo: S.pts.filter(p => p.cat == null).length };
+}
 const lineLen = l => Math.hypot(l[2] - l[0], l[3] - l[1]);
 function segDist(px, py, l) {
   const dx = l[2] - l[0], dy = l[3] - l[1], L2 = dx * dx + dy * dy;
@@ -468,13 +493,13 @@ function drawOverlay(c, map, k, live) {
   const showGrid = S.pts.length && (!live || step >= 3);
   if (showGrid) {
     S.pts.forEach((p, i) => {
-      if (p.status === 'stone') { drawMeasure(c, map, p.a, COL.a, k); drawMeasure(c, map, p.b, COL.b, k); }
+      if (!typeMode() && p.status === 'stone') { drawMeasure(c, map, p.a, COL.a, k); drawMeasure(c, map, p.b, COL.b, k); }
     });
     S.pts.forEach((p, i) => {
       const [x, y] = map(p.x, p.y);
       const isActive = live && step === 4 && i === S.active;
       const r = 6 * k;
-      if (p.status === 'skip') {
+      if (typeMode() ? p.cat === 'skip' : p.status === 'skip') {
         c.lineCap = 'round';
         for (const [w, col] of [[5 * k, 'rgba(255,255,255,.9)'], [2.2 * k, '#333']]) {
           c.strokeStyle = col; c.lineWidth = w; c.beginPath();
@@ -484,7 +509,8 @@ function drawOverlay(c, map, k, live) {
         c.beginPath(); c.arc(x, y, r, 0, 7); c.lineWidth = 4.5 * k; c.strokeStyle = 'rgba(255,255,255,.95)'; c.stroke();
         c.beginPath(); c.arc(x, y, r, 0, 7); c.lineWidth = 2 * k; c.strokeStyle = '#111'; c.stroke();
         c.beginPath(); c.arc(x, y, 1.6 * k, 0, 7); c.fillStyle = '#111'; c.fill();
-        if (p.status === 'fines') { c.beginPath(); c.arc(x, y, r, 0, 7); c.fillStyle = 'rgba(255,255,255,.8)'; c.fill(); haloText(c, 'F', x, y + 0.5 * k, k * 0.9, '#fff', 'center'); }
+        if (typeMode() && p.cat && CAT[p.cat]) { c.beginPath(); c.arc(x, y, r + 4 * k, 0, 7); c.fillStyle = 'rgba(20,20,18,.78)'; c.fill(); haloText(c, CAT[p.cat].ab, x, y + 0.5 * k, k * (CAT[p.cat].ab.length > 1 ? 0.8 : 0.95), '#fff', 'center'); }
+        else if (!typeMode() && p.status === 'fines') { c.beginPath(); c.arc(x, y, r, 0, 7); c.fillStyle = 'rgba(255,255,255,.8)'; c.fill(); haloText(c, 'F', x, y + 0.5 * k, k * 0.9, '#fff', 'center'); }
       }
       if (isActive) {
         c.setLineDash([5, 4]); c.lineWidth = 2.5; c.strokeStyle = '#fff';
@@ -565,6 +591,7 @@ function onImageClick(x, y) {
   if (step === 4) {
     if (S.active < 0) return;
     const p = S.pts[S.active];
+    if (typeMode()) { toast(`Use the buttons (or keys 1–5) to say what is under point ${p.n}.`); return; }
     if (p.status !== 'todo') { toast(`Point ${p.n} is already done. Press “Redo point” to measure it again, or “Next”.`); return; }
     S.clicks.push([x, y]);
     if (S.clicks.length === 4) {
@@ -585,7 +612,7 @@ function advance() {
   const n = S.pts.length; if (!n) return;
   for (let k = 1; k <= n; k++) {
     const j = (S.active + k) % n;
-    if (S.pts[j].status === 'todo') { setActive(j); return; }
+    if (!isDone(S.pts[j])) { setActive(j); return; }
   }
   toast('All grid points are done — go to Step 5.');
 }
@@ -606,7 +633,7 @@ function makeGrid() {
   if (!ci) { toast('Set the scale in Step 2 first.'); return; }
   const sMM = Number($('#spacing').value);
   if (!(sMM > 0)) { toast('Enter a grid spacing in mm.'); return; }
-  const measured = S.pts.filter(p => p.status !== 'todo').length;
+  const measured = S.pts.filter(p => p.status !== 'todo' || p.cat != null).length;
   if (measured && !confirm(`Making a new grid deletes the ${measured} points you have already done. Continue?`)) return;
   const sp = sMM * ci.ppmm;
   const nx = Math.floor(photo.W / sp), ny = Math.floor(photo.H / sp);
@@ -626,13 +653,14 @@ function stepDone(k) {
   if (k === 1) return !!photo;
   if (k === 2) return !!ci;
   if (k === 3) return S.pts.length > 0;
-  if (k === 4) return S.pts.length > 0 && S.pts.every(p => p.status !== 'todo');
-  if (k === 5 || k === 6) return classTable('b').n > 0 && S.pts.every(p => p.status !== 'todo');
+  if (k === 4) return S.pts.length > 0 && S.pts.every(isDone);
+  if (typeMode()) return k === 5 && S.pts.length > 0 && S.pts.every(isDone);
+  if (k === 5 || k === 6) return classTable('b').n > 0 && S.pts.every(isDone);
   return false;
 }
 function renderNav() {
-  const done4 = S.pts.filter(p => p.status !== 'todo').length;
-  $('#nav').innerHTML = STEPS.map((t, i) => {
+  const done4 = S.pts.filter(isDone).length;
+  $('#nav').innerHTML = (typeMode() ? STEPS_TYPE : STEPS).map((t, i) => {
     const k = i + 1; const d = stepDone(k);
     const cnt = k === 4 && S.pts.length ? `<span class="cnt">${done4}/${S.pts.length}</span>` : '';
     return `<button type="button" class="step-btn${d ? ' done' : ''}" data-step="${k}" ${k === step ? 'aria-current="step"' : ''}><span class="n">${d && k !== step ? '✓' : k}</span>${t}${cnt}</button>`;
@@ -652,6 +680,17 @@ function renderActionbar() {
     instr = ci ? 'Choose a grid spacing, then press “Make grid”.' : 'Set the scale in Step 2 first.';
     hint = ci ? 'Look for the biggest stone. The spacing should be at least as wide as it is.' : '';
     btns = ci ? `<button class="btn primary" data-act="grid">Make grid</button>${S.pts.length ? '<button class="btn" data-go="4">Next →</button>' : ''}` : `<button class="btn" data-go="2">← Step 2</button>`;
+  }
+  else if (step === 4 && typeMode() && S.pts.length) {
+    const p = S.pts[S.active] || S.pts[0];
+    if (p.cat === 'skip') { instr = `Point ${p.n} is marked “not usable”.`; hint = 'Press Next, or Change to pick again.'; }
+    else if (p.cat) { instr = `Point ${p.n}: ${CAT[p.cat].label}.`; hint = 'Press Next, or Change to pick again.'; }
+    else { instr = `Point ${p.n}: what is under the centre dot?`; hint = 'Choose one. On the lens cap, in shadow or cut off by the edge → Not usable.'; }
+    btns = CATS.map(([k, label], i) => `<button class="btn" data-act="cat:${k}">${label} <kbd>${i + 1}</kbd></button>`).join('') +
+      `<button class="btn" data-act="skip">Not usable <kbd>S</kbd></button>
+       <button class="btn" data-act="redo" ${p.cat == null ? 'disabled' : ''}>Change <kbd>R</kbd></button>
+       <button class="btn" data-act="prev">← Prev</button><button class="btn" data-act="next">Next →</button>
+       <label class="chk"><input type="checkbox" data-act="autozoom" ${S.autoZoom ? 'checked' : ''}> zoom to each point</label>`;
   }
   else if (step === 4) {
     if (!S.pts.length) { instr = 'Make the grid in Step 3 first.'; btns = `<button class="btn" data-go="3">← Step 3</button>`; }
@@ -676,7 +715,8 @@ function renderActionbar() {
         <label class="chk"><input type="checkbox" data-act="autozoom" ${S.autoZoom ? 'checked' : ''}> zoom to each point</label>`;
     }
   }
-  else if (step === 5) { instr = 'The photo shows all your measurements.'; hint = 'Click a point number in Step 4’s table to go back and fix it.'; btns = `<button class="btn primary" data-go="6">Next →</button>`; }
+  else if (step === 5 && !typeMode()) { instr = 'The photo shows all your measurements.'; hint = 'Click a point number in Step 4’s table to go back and fix it.'; btns = `<button class="btn primary" data-go="6">Next →</button>`; }
+  else if (step === 5 && typeMode()) { instr = 'The photo shows what you found at each point.'; hint = 'Click a point number in Step 4’s table to go back and fix it.'; btns = `<button class="btn primary" data-go="7">Next →</button>`; }
   else if (step === 6) { instr = 'Read the D-values off the curve.'; hint = 'Check the working below — try one yourself in your spreadsheet.'; btns = `<button class="btn primary" data-go="7">Next →</button>`; }
   else { instr = 'Download your data or print the worked page.'; hint = ''; }
   ab.innerHTML = `<div class="instr" aria-live="polite">${instr}${hint ? `<span class="hint">${hint}</span>` : ''}</div><div class="btns">${btns}</div>`;
@@ -733,6 +773,7 @@ grid points = ${nx} × ${ny} = ${nx * ny}</div>`;
 }
 function out4() {
   if (!S.pts.length) return `<p class="muted">Make the grid in Step 3 first.</p>`;
+  if (typeMode()) return out4type();
   const ci = calInfo(); const mmpp = ci && ci.mmpp;
   const c = { stone: 0, fines: 0, skip: 0, todo: 0 }; S.pts.forEach(p => c[p.status]++);
   const done = S.pts.length - c.todo;
@@ -758,7 +799,47 @@ b (mm) = b (px) × mm per pixel = ${nf(exI.bPx)} × ${mmpp.toFixed(4)} = ${nf(ex
     <div class="tablewrap"><table id="t4"><thead><tr><th>Point</th><th class="l">Result</th><th>a (px)</th><th>b (px)</th><th>a (mm)</th><th>b (mm)</th><th>Angle a–b</th><th class="l">Check</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="small muted no-print">Click a row to jump to that point.</p>`;
 }
+function out4type() {
+  const T = compTable(); const done = S.pts.filter(isDone).length;
+  const rows = S.pts.map((p, i) => `<tr class="pick${i === S.active && step === 4 ? ' sel' : ''}" data-pt="${i}"><td>${p.n}</td><td class="l">${p.cat === 'skip' ? 'Not usable' : p.cat ? CAT[p.cat].label : '–'}</td></tr>`).join('');
+  return `<p class="muted small">For each grid point, say what the centre dot sits on. Don’t measure anything — just identify it.</p>
+    <div class="progress" aria-hidden="true"><span style="width:${done / S.pts.length * 100}%"></span></div>
+    <p class="small">${done} of ${S.pts.length} points done · ${T.skip} not usable</p>
+    <div class="tablehead"><h3>What’s at each point</h3><button class="btn sm no-print" data-copy="t4">Copy table</button></div>
+    <div class="tablewrap"><table id="t4"><thead><tr><th>Point</th><th class="l">What’s there</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="small muted no-print">Click a row to jump to that point.</p>`;
+}
+function out5type() {
+  const T = compTable();
+  if (!T.n) return `<p class="muted">Identify some points in Step 4 first.</p>`;
+  const rows = T.rows.map(r => `<tr><td>${r.label}</td><td>${r.count}</td><td>${nf(r.pct)}</td></tr>`).join('');
+  const gravel = T.rows.filter(r => r.k === 'gw' || r.k === 'rock'), gN = gravel.reduce((s, r) => s + r.count, 0);
+  const gw = T.rows.find(r => r.k === 'gw');
+  return `${T.todo ? `<p class="flagbox">⚠ ${T.todo} grid point${T.todo > 1 ? 's are' : ' is'} not done yet. These results will change.</p>` : ''}
+    <p class="small muted">Percentages are of the ${T.n} usable points${T.skip ? ` (${T.skip} not usable point${T.skip > 1 ? 's' : ''} left out)` : ''}. Because the points are spread evenly, % of points ≈ % of the surface area covered.</p>
+    <div class="tablehead"><h3>Surface composition</h3><button class="btn sm no-print" data-copy="t5">Copy table</button></div>
+    <div class="tablewrap"><table id="t5"><thead><tr><th>What’s there</th><th>Points</th><th>% of surface</th></tr></thead>
+    <tbody>${rows}</tbody><tfoot><tr><td>Total</td><td>${T.n}</td><td>100.0</td></tr></tfoot></table></div>
+    <h3>Working</h3>
+    <div class="calc">% greywacke = ${gw.count} ÷ ${T.n} × 100 = ${nf(gw.pct)} %
+% all gravel (greywacke + other rock) = ${gN} ÷ ${T.n} × 100 = ${nf(gN / T.n * 100)} %</div>
+    ${compChart(T)}`;
+}
+function compChart(T) {
+  const W = 460, rowH = 36, m = { l: 170, r: 52, t: 8, b: 46 }, H = m.t + m.b + rowH * T.rows.length, pw = W - m.l - m.r;
+  const X = v => m.l + v / 100 * pw; let g = '';
+  for (let v = 0; v <= 100; v += 20) g += `<line x1="${X(v)}" x2="${X(v)}" y1="${m.t}" y2="${H - m.b}" stroke="${COL.grid}"/><text x="${X(v)}" y="${H - m.b + 17}" text-anchor="middle" font-size="13" fill="${COL.ink2}">${v}</text>`;
+  T.rows.forEach((r, i) => {
+    const y = m.t + i * rowH + 7, h = rowH - 14, w = X(r.pct) - m.l;
+    g += `<text x="${m.l - 10}" y="${y + h / 2}" text-anchor="end" dominant-baseline="middle" font-size="15" fill="${COL.ink}">${r.label}</text>`;
+    if (w > 0.5) { const rr = Math.min(4, w); g += `<path d="M${m.l},${y} H${m.l + w - rr} Q${m.l + w},${y} ${m.l + w},${y + rr} V${y + h - rr} Q${m.l + w},${y + h} ${m.l + w - rr},${y + h} H${m.l} Z" fill="${COL.b}"/>`; }
+    g += `<text x="${m.l + w + 6}" y="${y + h / 2}" dominant-baseline="middle" font-size="14" fill="${COL.ink2}">${nf(r.pct, 0)} %</text>`;
+  });
+  g += `<text x="${m.l + pw / 2}" y="${H - 6}" text-anchor="middle" font-size="13" fill="${COL.ink2}">% of surface</text>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Percentage of the surface covered by each material" ${SVGF}>${g}</svg>`;
+}
 function out5() {
+  if (typeMode()) return out5type();
   const ax = S.axis, tab = classTable(ax);
   if (!tab.n) return `<p class="muted">Measure some points in Step 4 first.</p>`;
   const todo = S.pts.filter(p => p.status === 'todo').length;
@@ -779,6 +860,7 @@ cumulative % finer than ${ex.hi} mm = ${[...exPrev, ex].map(r => nf(r.pct)).join
     ${histogram(tab, ax)}`;
 }
 function out6() {
+  if (typeMode()) return `<p class="muted">The cumulative curve and D-values need stone sizes. Go to Step 3 and choose “Stone size” to measure them on this photo.</p>`;
   const tb = classTable('b'), ta = classTable('a');
   if (!tb.n) return `<p class="muted">Measure some points in Step 4 first.</p>`;
   const ax = S.axis, tab = ax === 'a' ? ta : tb;
@@ -794,14 +876,17 @@ function out6() {
   const rcell = r => r ? (r.below ? '&lt; 8' : nf(r.v)) : '–';
   const exr = (ax === 'a' ? ra : rb)[1];
   const todo = S.pts.filter(p => p.status === 'todo').length;
+  const MA = meanAxes();
   return `${todo ? `<p class="flagbox">⚠ ${todo} grid point${todo > 1 ? 's are' : ' is'} not done yet. These results will change.</p>` : ''}
     <p class="small muted">Each dot shows the % of the sample finer than that size. <b>D50</b> is the median: half the stones are smaller. <b>D16</b> and <b>D84</b> show the small and large ends of the spread.</p>
     <div class="legendbar" style="margin:6px 0 2px"><span class="key"><i style="background:${COL.b}"></i>b-axis</span><span class="key"><i style="background:${COL.a}"></i>a-axis</span></div>
     ${cumChart(tb, ta, ax, sel)}
     <div class="tablehead"><h3>D-values (mm), read from the curve</h3><button class="btn sm no-print" data-copy="t6">Copy table</button></div>
-    <div class="tablewrap"><table id="t6" class="dtable"><thead><tr><th class="l">Axis</th><th>D16</th><th>D50</th><th>D84</th><th>D84 ÷ D16</th><th>Stones</th></tr></thead>
-    <tbody><tr${ax === 'b' ? ' class="sel"' : ''}><td class="l">b-axis</td><td>${cell(db[0])}</td><td>${cell(db[1])}</td><td>${cell(db[2])}</td><td>${spread(db)}</td><td>${tb.n}</td></tr>
-    <tr${ax === 'a' ? ' class="sel"' : ''}><td class="l">a-axis</td><td>${cell(da[0])}</td><td>${cell(da[1])}</td><td>${cell(da[2])}</td><td>${spread(da)}</td><td>${ta.n}</td></tr></tbody></table></div>
+    <div class="tablewrap"><table id="t6" class="dtable"><thead><tr><th class="l">Axis</th><th>D16</th><th>D50</th><th>D84</th><th>D84 ÷ D16</th><th>Mean*</th><th>Stones</th></tr></thead>
+    <tbody><tr${ax === 'b' ? ' class="sel"' : ''}><td class="l">b-axis</td><td>${cell(db[0])}</td><td>${cell(db[1])}</td><td>${cell(db[2])}</td><td>${spread(db)}</td><td>${MA ? nf(MA.b) : '–'}</td><td>${tb.n}</td></tr>
+    <tr${ax === 'a' ? ' class="sel"' : ''}><td class="l">a-axis</td><td>${cell(da[0])}</td><td>${cell(da[1])}</td><td>${cell(da[2])}</td><td>${spread(da)}</td><td>${MA ? nf(MA.a) : '–'}</td><td>${ta.n}</td></tr></tbody></table></div>
+    ${MA ? `<p class="small muted">*Mean of the ${MA.n} measured stones only — fines can’t be measured, so they are left out of the mean. Working: mean b = ${nf(MA.sumB)} ÷ ${MA.n} = ${nf(MA.b)} mm. Why is the mean bigger than D50 when there are fines?</p>
+    <p class="note">The c-axis (thickness) can’t be measured from a photo taken from above. In the field you would use callipers.</p>` : ''}
     <p class="small muted">D84 ÷ D16 measures how mixed the sizes are: close to 1 means well sorted (stones all similar), large means poorly sorted.</p>
     <h3>Working for the ${ax}-axis</h3>
     ${work}
@@ -815,13 +900,15 @@ function out6() {
 function out7() {
   const tb = classTable('b'); const ci = calInfo();
   const c = { stone: 0, fines: 0, skip: 0, todo: 0 }; S.pts.forEach(p => c[p.status]++);
-  const d50 = interpD(tb, 50);
+  const d50 = interpD(tb, 50); const MA = meanAxes(); const CT = compTable();
   const name = $('#student').value.trim();
   return `<dl class="kv"><dt>Name</dt><dd>${name ? esc(name) : '<span class="flag">⚠ add your name at the top</span>'}</dd>
       <dt>Photo</dt><dd>${photo ? esc(photo.label) : '–'}</dd>
       <dt>Scale</dt><dd>${ci ? ci.mmpp.toFixed(4) + ' mm per pixel' : '–'}</dd>
       <dt>Points</dt><dd>${S.pts.length ? `${c.stone} stones, ${c.fines} fines, ${c.skip} not usable${c.todo ? `, <span class="flag">${c.todo} not done</span>` : ''}` : '–'}</dd>
-      <dt>D50 (b-axis)</dt><dd>${d50 ? (d50.below ? '&lt; 8 mm' : nf(d50.D) + ' mm') : '–'}</dd></dl>
+      <dt>D50 (b-axis)</dt><dd>${d50 ? (d50.below ? '&lt; 8 mm' : nf(d50.D) + ' mm') : '–'}</dd>
+      <dt>Mean of measured stones</dt><dd>${MA ? `a = ${nf(MA.a)} mm, b = ${nf(MA.b)} mm (${MA.n} stones)` : '–'}</dd>
+      ${CT.n ? `<dt>Composition</dt><dd>${CT.rows.filter(r => r.count).map(r => `${r.label} ${nf(r.pct, 0)} %`).join(', ')}</dd>` : ''}</dl>
     <h3>Worked page</h3>
     <p class="small muted">Prints the marked-up photo and every step’s tables, working and graphs. In the print window choose <b>Save as PDF</b> to hand in a file.</p>
     <button class="btn primary" data-act="print">Print / save worked page as PDF</button>
@@ -834,18 +921,18 @@ function out7() {
 /* ---------- charts (SVG) ---------- */
 const SVGF = 'font-family="system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif"';
 function cumChart(tb, ta, ax, sel) {
-  const W = 640, H = 360, m = { l: 52, r: 18, t: 16, b: 50 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const W = 600, H = 380, m = { l: 56, r: 18, t: 16, b: 54 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
   const xmax = Math.max(tb.rows[tb.rows.length - 1].hi, ta.rows[ta.rows.length - 1].hi);
   const lx0 = 2, lx1 = Math.log2(xmax);
   const X = v => m.l + (Math.log2(v) - lx0) / (lx1 - lx0) * pw;
   const Y = p => m.t + (1 - p / 100) * ph;
   let g = '';
-  for (let p = 0; p <= 100; p += 20) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(p)}" y2="${Y(p)}" stroke="${COL.grid}" stroke-width="1"/><text x="${m.l - 8}" y="${Y(p)}" text-anchor="end" dominant-baseline="middle" font-size="12" fill="${COL.ink2}">${p}</text>`;
-  for (let v = 4; v <= xmax; v *= 2) g += `<line x1="${X(v)}" x2="${X(v)}" y1="${m.t}" y2="${m.t + ph}" stroke="${COL.grid}" stroke-width="1"/><text x="${X(v)}" y="${m.t + ph + 17}" text-anchor="middle" font-size="12" fill="${COL.ink2}">${v}</text>`;
-  g += `<text x="${m.l + pw / 2}" y="${H - 8}" text-anchor="middle" font-size="12.5" fill="${COL.ink2}">Size (mm) — each step doubles</text>`;
-  g += `<text transform="translate(14 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle" font-size="12.5" fill="${COL.ink2}">% finer than</text>`;
+  for (let p = 0; p <= 100; p += 20) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(p)}" y2="${Y(p)}" stroke="${COL.grid}" stroke-width="1"/><text x="${m.l - 8}" y="${Y(p)}" text-anchor="end" dominant-baseline="middle" font-size="14" fill="${COL.ink2}">${p}</text>`;
+  for (let v = 4; v <= xmax; v *= 2) g += `<line x1="${X(v)}" x2="${X(v)}" y1="${m.t}" y2="${m.t + ph}" stroke="${COL.grid}" stroke-width="1"/><text x="${X(v)}" y="${m.t + ph + 17}" text-anchor="middle" font-size="14" fill="${COL.ink2}">${v}</text>`;
+  g += `<text x="${m.l + pw / 2}" y="${H - 8}" text-anchor="middle" font-size="14.5" fill="${COL.ink2}">Size (mm) — each step doubles</text>`;
+  g += `<text transform="translate(14 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle" font-size="14.5" fill="${COL.ink2}">% finer than</text>`;
   // reference levels
-  for (const p of [16, 50, 84]) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(p)}" y2="${Y(p)}" stroke="${COL.ink3}" stroke-width="1" stroke-dasharray="4 4"/><text x="${W - m.r - 4}" y="${Y(p) - 6}" text-anchor="end" font-size="11.5" fill="${COL.ink2}">${p} %</text>`;
+  for (const p of [16, 50, 84]) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(p)}" y2="${Y(p)}" stroke="${COL.ink3}" stroke-width="1" stroke-dasharray="4 4"/><text x="${W - m.r - 4}" y="${Y(p) - 6}" text-anchor="end" font-size="13.5" fill="${COL.ink2}">${p} %</text>`;
   const series = (tab, color) => {
     const pts = tab.rows.map(r => [X(r.hi), Y(r.cum)]);
     let s = `<polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
@@ -861,7 +948,7 @@ function cumChart(tb, ta, ax, sel) {
     const x = X(d.D), y = Y(p);
     g += `<line x1="${x}" x2="${x}" y1="${y}" y2="${m.t + ph}" stroke="${COL.ink}" stroke-width="1" stroke-dasharray="2 3"/>`;
     g += `<circle cx="${x}" cy="${y}" r="4" fill="#fff" stroke="${COL.ink}" stroke-width="1.6"/>`;
-    g += `<text x="${x - 7}" y="${y - 8}" text-anchor="end" font-size="12" font-weight="650" fill="${COL.ink}" stroke="${COL.surface}" stroke-width="3" paint-order="stroke">D${p} = ${nf(d.D)} mm</text>`;
+    g += `<text x="${x - 7}" y="${y - 8}" text-anchor="end" font-size="14" font-weight="650" fill="${COL.ink}" stroke="${COL.surface}" stroke-width="3" paint-order="stroke">D${p} = ${nf(d.D)} mm</text>`;
   });
   // hover bands (one tooltip, both series)
   const edges = (tb.rows.length >= ta.rows.length ? tb : ta).rows.map(r => r.hi);
@@ -874,13 +961,13 @@ function cumChart(tb, ta, ax, sel) {
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative grain-size curve for b-axis and a-axis" ${SVGF}>${g}</svg>`;
 }
 function histogram(tab, ax) {
-  const W = 640, H = 230, m = { l: 44, r: 10, t: 12, b: 42 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const W = 600, H = 250, m = { l: 48, r: 10, t: 12, b: 46 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
   const n = tab.rows.length, band = pw / n, bw = Math.min(30, band - 2);
   const ymax = Math.max(10, Math.ceil(Math.max(...tab.rows.map(r => r.pct)) / 10) * 10);
   const Y = v => m.t + (1 - v / ymax) * ph;
   const color = ax === 'a' ? COL.a : COL.b;
   let g = '';
-  for (let v = 0; v <= ymax; v += ymax > 40 ? 20 : 10) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="${COL.grid}"/><text x="${m.l - 7}" y="${Y(v)}" text-anchor="end" dominant-baseline="middle" font-size="12" fill="${COL.ink2}">${v}</text>`;
+  for (let v = 0; v <= ymax; v += ymax > 40 ? 20 : 10) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="${COL.grid}"/><text x="${m.l - 7}" y="${Y(v)}" text-anchor="end" dominant-baseline="middle" font-size="14" fill="${COL.ink2}">${v}</text>`;
   tab.rows.forEach((r, i) => {
     const cx = m.l + band * (i + 0.5), x = cx - bw / 2, y = Y(r.pct), h = m.t + ph - y;
     const lab = r.lo === 0 ? '<8' : `${r.lo}–${r.hi}`;
@@ -888,12 +975,12 @@ function histogram(tab, ax) {
       const rr = Math.min(4, h, bw / 2);
       g += `<path d="M${x},${m.t + ph} V${y + rr} Q${x},${y} ${x + rr},${y} H${x + bw - rr} Q${x + bw},${y} ${x + bw},${y + rr} V${m.t + ph} Z" fill="${color}"/>`;
     }
-    g += `<text x="${cx}" y="${m.t + ph + 17}" text-anchor="middle" font-size="12" fill="${COL.ink2}">${lab}</text>`;
+    g += `<text x="${cx}" y="${m.t + ph + 17}" text-anchor="middle" font-size="14" fill="${COL.ink2}">${lab}</text>`;
     const tip = JSON.stringify({ t: `${lab} mm (${r.name})`, r: [[color, `${ax}-axis`, `${nf(r.pct)} %`, `${r.count} of ${tab.n}`]] });
     g += `<rect x="${m.l + band * i}" y="${m.t}" width="${band}" height="${ph}" fill="transparent" data-tip='${esc(tip)}'/>`;
   });
-  g += `<text x="${m.l + pw / 2}" y="${H - 6}" text-anchor="middle" font-size="12.5" fill="${COL.ink2}">Size class (mm)</text>`;
-  g += `<text transform="translate(12 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle" font-size="12.5" fill="${COL.ink2}">% of sample</text>`;
+  g += `<text x="${m.l + pw / 2}" y="${H - 6}" text-anchor="middle" font-size="14.5" fill="${COL.ink2}">Size class (mm)</text>`;
+  g += `<text transform="translate(12 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle" font-size="14.5" fill="${COL.ink2}">% of sample</text>`;
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Percentage of the sample in each size class, ${ax}-axis" ${SVGF}>${g}</svg>`;
 }
 
@@ -924,6 +1011,10 @@ document.addEventListener('pointermove', e => {
 function update() {
   save();
   renderNav(); renderActionbar();
+  $('#h4').textContent = typeMode() ? '4 · Identify what’s at each point' : '4 · Measure the stones';
+  $('#h5').textContent = typeMode() ? '5 · Surface composition' : '5 · Sort into size classes';
+  $('#axisRow').style.display = typeMode() ? 'none' : '';
+  $('#modeNote').textContent = typeMode() ? 'What’s there: identify the material under each point (greywacke, shell, sand…) to get % composition. Your scale and grid are shared with Stone size.' : 'Stone size: measure the a- and b-axis of each stone to get a size distribution.';
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', Number(p.dataset.step) === step));
   $('#out1').innerHTML = out1(); $('#out2').innerHTML = out2(); $('#out3').innerHTML = out3();
   $('#out4').innerHTML = out4(); $('#out5').innerHTML = out5(); $('#out6').innerHTML = out6(); $('#out7').innerHTML = out7();
@@ -934,7 +1025,7 @@ function goStep(k) {
   step = k; calPending = null;
   if (k === 4 && S.pts.length) {
     if (S.active < 0 || S.active >= S.pts.length) S.active = 0;
-    if (S.pts[S.active].status !== 'todo') { const j = S.pts.findIndex(p => p.status === 'todo'); if (j >= 0) S.active = j; }
+    if (isDone(S.pts[S.active])) { const j = S.pts.findIndex(p => !isDone(p)); if (j >= 0) S.active = j; }
     S.clicks = []; focusPoint(S.active);
   } else if (k !== 4 && k !== 2) { fit(); }
   update();
@@ -951,6 +1042,12 @@ document.addEventListener('click', e => {
 });
 function act(name, el) {
   const p = S.pts[S.active];
+  if (name.startsWith('cat:')) { if (p && typeMode()) { p.cat = name.slice(4); advance(); update(); } return; }
+  if (typeMode() && p && (name === 'skip' || name === 'redo')) {
+    if (name === 'skip') { p.cat = 'skip'; advance(); } else { p.cat = null; focusPoint(S.active); }
+    update(); return;
+  }
+  if (typeMode() && (name === 'fines' || name === 'undo')) return;
   switch (name) {
     case 'zin': zoomBy(1.6); break;
     case 'zout': zoomBy(1 / 1.6); break;
@@ -975,21 +1072,24 @@ function act(name, el) {
   }
 }
 document.addEventListener('keydown', e => {
-  if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest('select, textarea, input:not([type=checkbox]):not([type=radio])') || e.ctrlKey || e.metaKey || e.altKey) return;
   const k = e.key;
   if (k === 'Escape') { calPending = null; if (step === 4) S.clicks = []; update(); return; }
   if (step === 2 && k === 'Backspace') { e.preventDefault(); act('calUndo'); return; }
   if (step !== 4 || !S.pts.length) return;
   const map = { f: 'fines', F: 'fines', s: 'skip', S: 'skip', r: 'redo', R: 'redo', Backspace: 'undo', ArrowLeft: 'prev', ArrowRight: 'next' };
+  if (typeMode()) CATS.forEach(([c], i) => { map[String(i + 1)] = 'cat:' + c; });
   if (map[k]) { e.preventDefault(); act(map[k]); }
 });
 $('#capMM').addEventListener('input', e => { const v = Number(e.target.value); if (v > 0) { S.capMM = v; update(); } });
 $('#spacing').addEventListener('input', () => { $('#out3').innerHTML = out3(); });
 $('#student').addEventListener('input', e => { store.set('pebblecount:student', e.target.value); $('#out7').innerHTML = out7(); });
 document.querySelectorAll('input[name=axis]').forEach(r => r.addEventListener('change', e => { S.axis = e.target.value; update(); }));
+document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', e => { S.mode = e.target.value; S.clicks = []; const j = S.pts.findIndex(p => !isDone(p)); S.active = j >= 0 ? j : 0; update(); }));
 function syncInputs() {
   $('#capMM').value = S.capMM; $('#spacing').value = S.spacingMM;
   document.querySelectorAll('input[name=axis]').forEach(r => r.checked = r.value === S.axis);
+  document.querySelectorAll('input[name=mode]').forEach(r => r.checked = r.value === (S.mode || 'size'));
 }
 
 /* ---------- output: CSV, copy, print ---------- */
@@ -1004,11 +1104,11 @@ function csvText() {
   L.push(['# Average cap length (px)', ci ? ci.mean.toFixed(2) : ''].join(','));
   L.push(['# mm per pixel', ci ? ci.mmpp.toFixed(5) : ''].join(','));
   L.push(['# Grid spacing (mm)', S.grid ? S.grid.spacingMM : ''].join(','));
-  L.push(['point', 'x_px', 'y_px', 'result', 'a_px', 'b_px', 'a_mm', 'b_mm', 'angle_deg'].join(','));
+  L.push(['point', 'x_px', 'y_px', 'result', 'a_px', 'b_px', 'a_mm', 'b_mm', 'angle_deg', 'whats_there'].join(','));
   for (const p of S.pts) {
     const inf = ptInfo(p, ci && ci.mmpp);
     const res = { stone: 'stone', fines: 'fines <8 mm', skip: 'not usable', todo: 'not done' }[p.status];
-    L.push([p.n, p.x.toFixed(1), p.y.toFixed(1), res, fx(inf.aPx), fx(inf.bPx), fx(inf.aMM), fx(inf.bMM), fx(inf.angle, 0)].map(csvCell).join(','));
+    L.push([p.n, p.x.toFixed(1), p.y.toFixed(1), res, fx(inf.aPx), fx(inf.bPx), fx(inf.aMM), fx(inf.bMM), fx(inf.angle, 0), p.cat === 'skip' ? 'not usable' : p.cat ? CAT[p.cat].label : ''].map(csvCell).join(','));
   }
   return L.join('\r\n') + '\r\n';
 }
@@ -1043,7 +1143,7 @@ function preparePrint() {
   const name = $('#student').value.trim(), ci = calInfo();
   const d = new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' });
   $('#printHead').innerHTML = `<p style="margin:0 0 6pt;font-size:12pt"><b>${name ? esc(name) : 'Name: ____________________'}</b> · ${esc(photo ? photo.label : '')} · ${d}</p>
-    <p style="margin:0 0 8pt" class="small">Scale ${ci ? ci.mmpp.toFixed(4) + ' mm per pixel' : 'not set'} · grid spacing ${S.grid ? S.grid.spacingMM + ' mm' : 'not set'} · orange = a-axis, blue = b-axis, green = scale lines, F = fines, × = not usable</p>`;
+    <p style="margin:0 0 8pt" class="small">Scale ${ci ? ci.mmpp.toFixed(4) + ' mm per pixel' : 'not set'} · grid spacing ${S.grid ? S.grid.spacingMM + ' mm' : 'not set'} · ${typeMode() ? 'G = greywacke, R = other rock, Sh = shell, S = sand or finer, P = plant/other, × = not usable' : 'orange = a-axis, blue = b-axis, green = scale lines, F = fines, × = not usable'}</p>`;
   const fig = $('#printFig'); fig.innerHTML = '';
   if (!photo) return;
   try {
@@ -1058,7 +1158,11 @@ window.addEventListener('beforeprint', () => { if (!$('#printFig').firstChild) p
 window.addEventListener('afterprint', () => { $('#printFig').innerHTML = ''; printing = false; update(); });
 
 /* ---------- photo loading ---------- */
-function photoList() { const l = [...PHOTOS]; if (uploaded) l.push(uploaded); return l; }
+const QS = new URLSearchParams(location.search);
+const ONLY = (QS.get('photos') || '').split(',').map(s => s.trim()).filter(Boolean);
+const LIST = ONLY.length ? PHOTOS.filter(p => ONLY.includes(p.id)) : PHOTOS;
+const QMODE = ['size', 'type'].includes(QS.get('mode')) ? QS.get('mode') : null;
+function photoList() { const l = [...(LIST.length ? LIST : PHOTOS)]; if (uploaded) l.push(uploaded); return l; }
 function fillSelect(sel) {
   $('#photoSel').innerHTML = photoList().map(p => `<option value="${esc(p.id)}"${p.id === sel ? ' selected' : ''}>${esc(p.label)}${p === uploaded ? ' (uploaded)' : ''}</option>`).join('');
 }
@@ -1077,7 +1181,7 @@ function loadPhoto(entry) {
     const id = entry.uploadedName ? `${entry.uploadedName}|${W}x${H}` : entry.id;
     photo = { id, label: entry.label, W, H, note };
     store.set('pebblecount:lastPhoto', entry.uploadedName ? '' : entry.id);
-    S = load(id); calPending = null; syncInputs();
+    S = load(id); if (QMODE) S.mode = QMODE; calPending = null; syncInputs();
     $('#empty').style.display = 'none';
     fit(); resize(); goStep(step);
   };
@@ -1095,7 +1199,7 @@ $('#upl').addEventListener('change', e => {
 /* ---------- start ---------- */
 $('#student').value = store.get('pebblecount:student') || '';
 const last = store.get('pebblecount:lastPhoto');
-const first = photoList().find(p => p.id === last) || PHOTOS[0];
+const first = photoList().find(p => p.id === last) || photoList()[0];
 fillSelect(first.id);
 syncInputs(); renderNav(); renderActionbar();
 window.addEventListener('resize', resize);

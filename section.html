@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cliff Section Logger</title>
+<!--
+  Cliff Section Logger — measure and describe the layers (units) in a cliff photo, using a person
+  of known height for scale, and draw a sediment log. GEOG 262 Virtual Field Trip.
+  Runs entirely in the browser. Add photos to the PHOTOS list below.
+-->
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f4f3ef; --surface:#fcfcfb; --surface-2:#efeee9; --line:#dcdad3; --grid:#e6e4de;
+  --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#77766f;
+  --accent:#1f3a4d; --accent-2:#2c5470; --scale:#1baf7a;
+  --warn-bg:#fff1d6; --warn-ink:#6b4300; --ok-bg:#e1f1e6; --ok-ink:#1d5a32; --sel:#e6eef8; --r:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.app{max-width:1440px;margin:0 auto;padding:14px 16px 28px}
+header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px 20px;flex-wrap:wrap;margin-bottom:12px}
+h1{font-size:22px;line-height:1.2;margin:0;letter-spacing:-.01em}
+.sub{margin:3px 0 0;color:var(--ink-2);font-size:14px}
+.namebox label{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink-2)}
+input[type=text],input[type=number],select{font:inherit;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 9px}
+input[type=number]{width:96px}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
+nav.steps{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 6px}
+.step-btn{display:flex;align-items:center;gap:8px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 13px 5px 5px;font:inherit;font-size:14px;cursor:pointer}
+.step-btn .n{width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);font-weight:650;font-size:13px}
+.step-btn.done .n{background:var(--ok-bg);color:var(--ok-ink)}
+.step-btn[aria-current=step]{background:var(--accent);border-color:var(--accent);color:#fff}
+.step-btn[aria-current=step] .n{background:#fff;color:var(--accent)}
+.work{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin-top:8px}
+@media (min-width:1180px){.work{grid-template-columns:minmax(0,1fr) 460px;align-items:start}.panelwrap{position:sticky;top:10px;max-height:calc(100vh - 20px);overflow:auto}}
+.stage{display:flex;flex-direction:column;gap:10px;min-width:0}
+.actionbar{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.instr{flex:1 1 300px;font-weight:560}
+.instr .hint{display:block;font-weight:400;color:var(--ink-2);font-size:13.5px}
+.btns{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.btn{font:inherit;font-size:14px;line-height:1.2;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn[disabled]{opacity:.45;cursor:default}
+.btn.sm{font-size:12.5px;padding:4px 9px}
+.btn kbd{font:11px ui-monospace,Menlo,Consolas,monospace;border:1px solid currentColor;border-radius:4px;padding:0 4px;opacity:.65}
+.viewer{position:relative;background:#22221f;border-radius:var(--r);overflow:hidden;min-height:240px}
+.viewer canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
+.zoom{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px}
+.zoom button{width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.35);background:rgba(20,20,18,.72);color:#fff;font:600 18px/1 system-ui,sans-serif;cursor:pointer}
+.zoom button.fit{font-size:11px}
+.readout{position:absolute;left:10px;bottom:9px;font:12px ui-monospace,Menlo,Consolas,monospace;color:#fff;background:rgba(15,15,13,.66);padding:3px 8px;border-radius:6px;pointer-events:none}
+.legendbar{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--ink-2)}
+.key{display:inline-flex;align-items:center;gap:6px}
+.key i{display:inline-block;width:18px;height:3px;border-radius:2px}
+.panel{display:none;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px 16px}
+.panel.on{display:block}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel h3{font-size:14px;margin:18px 0 6px}
+.panel p{margin:6px 0}
+.muted{color:var(--ink-2)} .small{font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:8px 0}
+.row label{display:inline-flex;align-items:center;gap:8px}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:8px 0;font-size:14px}
+.kv dt{color:var(--ink-2)} .kv dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+.calc{font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--surface-2);border-radius:8px;padding:9px 11px;margin:8px 0;white-space:pre-wrap;overflow-x:auto}
+.note{font-size:13.5px;background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:8px 0}
+.flagbox{background:var(--warn-bg);color:var(--warn-ink);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13.5px}
+.flag{display:inline-block;background:var(--warn-bg);color:var(--warn-ink);border-radius:6px;padding:1px 6px;font-size:12px;font-weight:550}
+.tablewrap{border:1px solid var(--line);border-radius:8px;overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:5px 8px;border-bottom:1px solid var(--grid);text-align:right;vertical-align:top}
+th:first-child,td:first-child,td.l,th.l{text-align:left}
+thead th{background:var(--surface-2);color:var(--ink-2);font-weight:600;font-size:12.5px}
+.unitcard{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;background:#fff}
+.unitcard h4{margin:0 0 6px;font-size:14px;display:flex;justify-content:space-between;gap:8px}
+.unitcard h4 span{font-weight:500;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.unitcard .f{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;align-items:center;font-size:13.5px}
+.unitcard .f label{color:var(--ink-2)}
+.unitcard input[type=text],.unitcard select{width:100%;padding:5px 8px;font-size:14px}
+.tablehead{display:flex;justify-content:space-between;align-items:flex-end;gap:8px;margin:16px 0 6px}
+.tablehead h3{margin:0}
+.logwrap{display:flex;justify-content:center}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;place-items:center;z-index:60;padding:16px}
+#modal .box{background:#fff;border-radius:12px;padding:16px;max-width:640px;width:100%}
+#modal textarea{width:100%;height:240px;font:12px ui-monospace,Menlo,Consolas,monospace;border:1px solid var(--line);border-radius:8px;padding:8px}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;font-size:14px;z-index:70;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.print-only{display:none}
+@media print{
+  @page{margin:14mm}
+  body{background:#fff;font-size:10.5pt}
+  .app{padding:0;max-width:none}
+  .no-print,nav.steps,.actionbar,.viewer,.legendbar,.toast,#modal{display:none!important}
+  .print-only{display:block}
+  .work{display:block}
+  .panelwrap{position:static;max-height:none;overflow:visible}
+  .panel{display:block!important;border:0;border-top:1px solid #bbb;border-radius:0;padding:10pt 0 0;margin:0 0 10pt}
+  .panel[data-step="6"]{display:none!important}
+  .tablewrap{border:0;overflow:visible}
+  tr,.unitcard,svg,figure{break-inside:avoid}
+  #printFig img{width:100%;height:auto;display:block}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div><h1>Cliff section logger</h1><p class="sub">Measure and describe the layers in a cliff — Orere Point, Firth of Thames virtual field trip.</p></div>
+    <div class="namebox no-print"><label>Your name <input type="text" id="student" autocomplete="off" placeholder="First and last name" size="22"></label></div>
+  </header>
+  <div class="print-only" id="printHead"></div>
+  <figure class="print-only" id="printFig" style="margin:0 0 10pt"></figure>
+  <nav class="steps no-print" id="nav" aria-label="Steps"></nav>
+  <div class="work">
+    <div class="stage no-print">
+      <div class="actionbar" id="actionbar"></div>
+      <div class="viewer" id="viewer">
+        <canvas id="cv" aria-label="Photo of the cliff. Click to measure."></canvas>
+        <div class="zoom">
+          <button type="button" data-act="zin" aria-label="Zoom in">+</button>
+          <button type="button" data-act="zout" aria-label="Zoom out">−</button>
+          <button type="button" class="fit" data-act="zfit" aria-label="Show whole photo">FIT</button>
+        </div>
+        <div class="readout" id="readout">–</div>
+      </div>
+      <div class="legendbar">
+        <span class="key"><i style="background:var(--scale)"></i>Scale line (person)</span>
+        <span class="key"><i style="background:#fff;outline:1px solid #333"></i>Unit boundaries</span>
+        <span>Scroll or + / − to zoom · drag to move</span>
+      </div>
+    </div>
+    <div class="panelwrap">
+      <section class="panel" data-step="1">
+        <h2>1 · Choose the photo</h2>
+        <div class="row no-print"><label>Photo <select id="photoSel"></select></label></div>
+        <div id="out1"></div>
+      </section>
+      <section class="panel" data-step="2">
+        <h2>2 · Set the scale</h2>
+        <p class="muted">There is no ruler on the cliff, so we use a person of known height standing near it.</p>
+        <div class="row"><label>Height of the person <input type="number" id="refH" min="0.1" max="5" step="0.01"> m</label></div>
+        <div id="out2"></div>
+      </section>
+      <section class="panel" data-step="3">
+        <h2>3 · Mark the boundaries</h2>
+        <div id="out3"></div>
+      </section>
+      <section class="panel" data-step="4">
+        <h2>4 · Describe each unit</h2>
+        <div id="out4"></div>
+      </section>
+      <section class="panel" data-step="5">
+        <h2>5 · Your sediment log</h2>
+        <div id="out5"></div>
+      </section>
+      <section class="panel" data-step="6">
+        <h2>6 · Hand in your work</h2>
+        <div id="out6"></div>
+      </section>
+    </div>
+  </div>
+</div>
+<div id="modal" role="dialog" aria-modal="true" aria-labelledby="mt"><div class="box">
+  <h2 id="mt" style="font-size:16px;margin:0 0 6px">Copy this text</h2>
+  <p class="small muted" style="margin:0 0 8px">Your browser blocked automatic copying. The text is selected — press Ctrl+C (or ⌘C).</p>
+  <textarea id="modalText" readonly></textarea>
+  <div style="text-align:right;margin-top:8px"><button class="btn" data-act="closeModal">Close</button></div></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+'use strict';
+const PHOTOS = [
+  { id: 'Orere_cliff_01', label: 'Orere Point cliff – with person for scale', src: 'Orere_cliff_01.jpg', refH: 1.65 },
+  { id: 'Orere_cliff_02', label: 'Orere Point cliff – further along (no person)', src: 'Orere_cliff_02.jpg', refH: 1.65 },
+];
+const TYPES = [
+  ['covered', 'Covered (grass, plants, slumped material)', 0.18, 'p-cov'],
+  ['soil', 'Soil / topsoil', 0.32, 'p-soil'],
+  ['mud', 'Clay or silt (mud)', 0.38, 'p-mud'],
+  ['sand', 'Sand', 0.55, 'p-sand'],
+  ['gsand', 'Gravelly sand', 0.7, 'p-gsand'],
+  ['sgravel', 'Sandy gravel', 0.85, 'p-sgrav'],
+  ['gravel', 'Gravel (pebbles, cobbles)', 1.0, 'p-grav'],
+];
+const TYPE = Object.fromEntries(TYPES.map(t => [t[0], { label: t[1], w: t[2], pat: t[3] }]));
+const STEPS = ['Photo', 'Scale', 'Boundaries', 'Describe', 'Log', 'Hand in'];
+const SCALE_COL = '#1baf7a';
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nf = (v, d = 2) => (v == null || !isFinite(v)) ? '–' : v.toLocaleString('en-NZ', { minimumFractionDigits: d, maximumFractionDigits: d });
+const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
+
+let img = null, photo = null, step = 1, S = null, pending = null, hover = null;
+function fresh(p) { return { v: 1, refH: p.refH || 1.65, scale: null, bnds: [], units: [] }; }
+function save() { if (photo) store.set('section:' + photo.id, JSON.stringify(S)); }
+function load(p) { try { const s = JSON.parse(store.get('section:' + p.id)); if (s && s.v === 1) return Object.assign(fresh(p), s); } catch (e) { } return fresh(p); }
+
+/* derived */
+function mpp() { if (!S.scale) return null; const px = Math.hypot(S.scale[2] - S.scale[0], S.scale[3] - S.scale[1]); return px > 0 ? { px, mpp: S.refH / px } : null; }
+function sortedB() { return S.bnds.slice().sort((a, b) => b[1] - a[1]); } // base (largest y) first
+function unitsInfo() {
+  const sc = mpp(), B = sortedB(); const out = [];
+  for (let i = 1; i < B.length; i++) {
+    const dy = B[i - 1][1] - B[i][1];
+    out.push({ n: i, base: B[i - 1], top: B[i], dy, t: sc ? dy * sc.mpp : null, d: S.units[i - 1] || {} });
+  }
+  return out;
+}
+function syncUnits() { const n = Math.max(0, S.bnds.length - 1); while (S.units.length < n) S.units.push({ type: '', colour: '', notes: '' }); }
+
+/* viewer */
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let cw = 600, ch = 400, dpr = 1, view = { z: 1, cx: 0, cy: 0 };
+const base = () => Math.min(cw / photo.W, ch / photo.H), sc = () => base() * view.z;
+const toScreen = (x, y) => { const s = sc(); return [(x - view.cx) * s + cw / 2, (y - view.cy) * s + ch / 2]; };
+const toImage = (x, y) => { const s = sc(); return [(x - cw / 2) / s + view.cx, (y - ch / 2) / s + view.cy]; };
+function fit() { view = { z: 1, cx: photo.W / 2, cy: photo.H / 2 }; }
+function clampView() { view.z = clamp(view.z, 1, 16); const s = sc(), hw = cw / 2 / s, hh = ch / 2 / s; view.cx = hw * 2 >= photo.W ? photo.W / 2 : clamp(view.cx, hw, photo.W - hw); view.cy = hh * 2 >= photo.H ? photo.H / 2 : clamp(view.cy, hh, photo.H - hh); }
+function resize() { cw = $('#viewer').clientWidth || 600; ch = photo ? Math.min(clamp(innerHeight * .72, 300, 820), cw * photo.H / photo.W) : 360; dpr = devicePixelRatio || 1; cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); cv.style.height = ch + 'px'; if (photo) clampView(); draw(); }
+let raf = 0; function draw() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; drawNow(); }); }
+function drawNow() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#22221f'; ctx.fillRect(0, 0, cw, ch); if (!photo) return;
+  const s = sc(); ctx.save(); ctx.translate(cw / 2, ch / 2); ctx.scale(s, s); ctx.translate(-view.cx, -view.cy); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(img, 0, 0, photo.W, photo.H); ctx.restore();
+  overlay(ctx, toScreen, 1, true); readout();
+}
+function haloLine(c, x1, y1, x2, y2, col, w) { c.lineCap = 'round'; for (const [ww, cc] of [[w + 3, 'rgba(255,255,255,.92)'], [w, col]]) { c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.strokeStyle = cc; c.lineWidth = ww; c.stroke(); } }
+function dot(c, x, y, col, r) { c.beginPath(); c.arc(x, y, r + 1.5, 0, 7); c.fillStyle = '#fff'; c.fill(); c.beginPath(); c.arc(x, y, r, 0, 7); c.fillStyle = col; c.fill(); }
+function txt(c, t, x, y, k, align = 'left') { c.font = `650 ${12.5 * k}px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif`; c.textAlign = align; c.textBaseline = 'middle'; c.lineJoin = 'round'; c.strokeStyle = 'rgba(0,0,0,.85)'; c.lineWidth = 3.2 * k; c.strokeText(t, x, y); c.fillStyle = '#fff'; c.fillText(t, x, y); }
+function overlay(c, map, k, live) {
+  if (S.scale) { const [a, b] = map(S.scale[0], S.scale[1]), [d, e] = map(S.scale[2], S.scale[3]); haloLine(c, a, b, d, e, SCALE_COL, 2.5 * k); dot(c, a, b, SCALE_COL, 3 * k); dot(c, d, e, SCALE_COL, 3 * k); txt(c, `${nf(S.refH, 2)} m`, Math.max(a, d) + 8 * k, (b + e) / 2, k); }
+  if (live && step === 2 && pending) { const [a, b] = map(pending[0], pending[1]); dot(c, a, b, SCALE_COL, 3); if (hover) { const [d, e] = map(hover[0], hover[1]); haloLine(c, a, b, d, e, SCALE_COL, 2); } }
+  const B = sortedB();
+  if (B.length > 1) { // connector
+    for (let i = 1; i < B.length; i++) { const [a, b] = map(B[i - 1][0], B[i - 1][1]), [d, e] = map(B[i][0], B[i][1]); c.setLineDash([4 * k, 4 * k]); haloLine(c, a, b, d, e, '#222', 1.2 * k); c.setLineDash([]); }
+  }
+  B.forEach((p, i) => { const [x, y] = map(p[0], p[1]); haloLine(c, x - 34 * k, y, x + 34 * k, y, '#111', 2 * k); txt(c, i === 0 ? 'base' : `top of ${i}`, x + 40 * k, y, k * 0.95); });
+  for (let i = 1; i < B.length; i++) { const [a, b] = map(B[i - 1][0], B[i - 1][1]), [d, e] = map(B[i][0], B[i][1]); txt(c, `Unit ${i}`, (a + d) / 2 - 42 * k, (b + e) / 2, k, 'right'); }
+}
+let drag = null;
+const evPos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+cv.addEventListener('pointerdown', e => { if (!photo || (e.pointerType === 'mouse' && e.button !== 0)) return; cv.setPointerCapture(e.pointerId); const [x, y] = evPos(e); drag = { x, y, cx: view.cx, cy: view.cy, moved: false }; });
+cv.addEventListener('pointermove', e => { if (!photo) return; const [x, y] = evPos(e); hover = toImage(x, y); if (drag) { const dx = x - drag.x, dy = y - drag.y; if (!drag.moved && Math.hypot(dx, dy) > 5) drag.moved = true; if (drag.moved) { const s = sc(); view.cx = drag.cx - dx / s; view.cy = drag.cy - dy / s; clampView(); } } draw(); });
+cv.addEventListener('pointerup', e => { if (!drag) return; const m = drag.moved; drag = null; if (!m) { const [x, y] = evPos(e); onClick(...toImage(x, y)); } });
+cv.addEventListener('pointerleave', () => { if (!drag) { hover = null; draw(); } });
+cv.addEventListener('wheel', e => { if (!photo) return; e.preventDefault(); const [x, y] = evPos(e), [ix, iy] = toImage(x, y); view.z = clamp(view.z * Math.pow(1.0018, -e.deltaY), 1, 16); const s = sc(); view.cx = ix - (x - cw / 2) / s; view.cy = iy - (y - ch / 2) / s; clampView(); draw(); }, { passive: false });
+function readout() {
+  const el = $('#readout'); if (!photo) { el.textContent = '–'; return; }
+  if (!hover || hover[0] < 0 || hover[1] < 0 || hover[0] > photo.W || hover[1] > photo.H) { el.textContent = `zoom ×${view.z.toFixed(1)}`; return; }
+  const s = mpp(); el.textContent = `y ${hover[1].toFixed(0)} px${s ? `  ·  ${(hover[1] * s.mpp).toFixed(2)} m from top of photo` : ''}  ·  zoom ×${view.z.toFixed(1)}`;
+}
+function onClick(x, y) {
+  if (x < 0 || y < 0 || x > photo.W || y > photo.H) { toast('That click was outside the photo.'); return; }
+  if (step === 2) { if (!pending) { if (S.scale) { toast('Press “Redo scale” to measure the person again.'); return; } pending = [x, y]; } else { S.scale = [pending[0], pending[1], x, y]; pending = null; } update(); return; }
+  if (step === 3) { if (!mpp()) { toast('Set the scale in Step 2 first.'); return; } S.bnds.push([x, y]); syncUnits(); update(); return; }
+  toast(step === 1 ? 'Go to Step 2 to start.' : 'Go back to Step 3 to add boundaries.');
+}
+
+/* rendering */
+function renderNav() {
+  const done = [!!photo, !!mpp(), S.bnds.length > 1, unitsInfo().length > 0 && unitsInfo().every(u => u.d.type), unitsInfo().length > 0, false];
+  $('#nav').innerHTML = STEPS.map((t, i) => `<button type="button" class="step-btn${done[i] ? ' done' : ''}" data-step="${i + 1}" ${i + 1 === step ? 'aria-current="step"' : ''}><span class="n">${done[i] && i + 1 !== step ? '✓' : i + 1}</span>${t}</button>`).join('');
+}
+function renderBar() {
+  let ins = '', hint = '', btns = '';
+  if (step === 1) { ins = 'Look along the cliff. How many different layers can you see?'; hint = 'Zoom in close: look for changes in colour, grain size and how hard or soft the layers look.'; btns = '<button class="btn primary" data-go="2">Next: set the scale →</button>'; }
+  else if (step === 2) {
+    if (pending) { ins = 'Now click the bottom of their feet.'; hint = 'Click straight below the first point.'; }
+    else if (!S.scale) { ins = 'Click the top of the person’s head.'; hint = 'Zoom in (+) first so you can click exactly.'; }
+    else { ins = 'Scale done.'; hint = 'Check the numbers in the panel, then go to Step 3.'; }
+    btns = `<button class="btn" data-act="redoScale" ${S.scale || pending ? '' : 'disabled'}>Redo scale</button>${mpp() ? '<button class="btn primary" data-go="3">Next →</button>' : ''}`;
+  } else if (step === 3) {
+    ins = S.bnds.length === 0 ? 'Click the BASE of the exposed cliff — where the bare face starts.' : `Click the TOP of unit ${S.bnds.length} — the next boundary going up.`;
+    hint = S.bnds.length === 0 ? 'Then work upwards, clicking each boundary where one layer changes to the next.' : 'When you reach the top of the cliff, stop and go to Step 4.';
+    btns = `<button class="btn" data-act="undoB" ${S.bnds.length ? '' : 'disabled'}>Undo last <kbd>⌫</kbd></button><button class="btn" data-act="clearB" ${S.bnds.length ? '' : 'disabled'}>Clear all</button>${S.bnds.length > 1 ? '<button class="btn primary" data-go="4">Next →</button>' : ''}`;
+  } else if (step === 4) { ins = 'Describe each unit in the panel.'; hint = 'Zoom in on each one on the photo while you describe it.'; btns = '<button class="btn primary" data-go="5">Next →</button>'; }
+  else if (step === 5) { ins = 'Your sediment log is drawn to scale.'; hint = 'Compare it with the photo — does it look right?'; btns = '<button class="btn primary" data-go="6">Next →</button>'; }
+  else { ins = 'Print or save your work.'; }
+  $('#actionbar').innerHTML = `<div class="instr" aria-live="polite">${ins}${hint ? `<span class="hint">${hint}</span>` : ''}</div><div class="btns">${btns}</div>`;
+}
+function out1() {
+  if (!photo) return '<p class="muted">Loading…</p>';
+  return `<dl class="kv"><dt>Photo</dt><dd>${esc(photo.label)}</dd><dt>Size</dt><dd>${photo.W.toLocaleString('en-NZ')} × ${photo.H.toLocaleString('en-NZ')} pixels</dd></dl>
+  <p class="note">This is the cliff just west of the car park at Orere Point. In the field you would sketch it, estimate its height and describe each layer. Here you will measure it from the photo.</p>`;
+}
+function out2() {
+  const s = mpp();
+  if (!s) return `<p class="muted">Click the top of the person’s head, then the bottom of their feet.</p>`;
+  return `<h3>Working</h3><div class="calc">person in photo = ${nf(s.px, 1)} pixels tall
+metres per pixel = ${nf(S.refH, 2)} m ÷ ${nf(s.px, 1)} px = ${s.mpp.toFixed(5)} m/px
+1 metre = ${nf(1 / s.mpp, 1)} pixels</div>
+  <p class="flagbox">⚠ The person is standing in front of the cliff, closer to the camera. Things further away look smaller in a photo, so the cliff is really a bit taller than this scale will tell you. Treat your heights as <b>minimum estimates</b>.</p>`;
+}
+function out3() {
+  const U = unitsInfo(), s = mpp();
+  if (!s) return '<p class="muted">Set the scale in Step 2 first.</p>';
+  if (!U.length) return `<p class="muted">Click the base of the exposed cliff, then each boundary going upwards. Each pair of clicks makes one unit.</p>
+  <p class="note">Only the up-and-down distance between clicks counts, so you can click wherever each boundary is easiest to see.</p>`;
+  const tot = U.reduce((a, u) => a + u.t, 0);
+  return `<div class="tablehead"><h3>Unit thicknesses</h3><button class="btn sm no-print" data-copy="t3">Copy table</button></div>
+  <div class="tablewrap"><table id="t3"><thead><tr><th>Unit</th><th>Height in photo (px)</th><th>Thickness (m)</th></tr></thead><tbody>
+  ${U.slice().reverse().map(u => `<tr><td>Unit ${u.n}</td><td>${nf(u.dy, 0)}</td><td>${nf(u.t, 2)}</td></tr>`).join('')}</tbody>
+  <tfoot><tr><td><b>Total exposed</b></td><td>${nf(U.reduce((a, u) => a + u.dy, 0), 0)}</td><td><b>${nf(tot, 2)}</b></td></tr></tfoot></table></div>
+  <h3>Working (unit 1)</h3><div class="calc">thickness = height in pixels × metres per pixel = ${nf(U[0].dy, 0)} × ${s.mpp.toFixed(5)} = ${nf(U[0].t, 2)} m</div>
+  <p class="small muted">Unit 1 is at the bottom. Units are listed top-down, the way you would see them on the cliff.</p>`;
+}
+function out4() {
+  const U = unitsInfo();
+  if (!U.length) return '<p class="muted">Mark at least two boundaries in Step 3 first.</p>';
+  return U.slice().reverse().map(u => `<div class="unitcard"><h4>Unit ${u.n} ${u.n === 1 ? '(bottom)' : u.n === U.length ? '(top)' : ''}<span>${nf(u.t, 2)} m thick</span></h4>
+    <div class="f"><label for="ty${u.n}">Sediment</label><select id="ty${u.n}" data-u="${u.n - 1}" data-f="type"><option value="">Choose…</option>${TYPES.map(t => `<option value="${t[0]}"${u.d.type === t[0] ? ' selected' : ''}>${t[1]}</option>`).join('')}</select>
+    <label for="co${u.n}">Colour</label><input type="text" id="co${u.n}" data-u="${u.n - 1}" data-f="colour" value="${esc(u.d.colour || '')}" placeholder="e.g. orange-brown">
+    <label for="no${u.n}">Notes</label><input type="text" id="no${u.n}" data-u="${u.n - 1}" data-f="notes" value="${esc(u.d.notes || '')}" placeholder="layering, roundness, sorting, roots…"></div></div>`).join('') +
+    `<p class="small muted">Think about: are the gravels rounded or angular? Are they in layers? Is the top of the cliff soil? Your answers help with report questions Q3 and Q4.</p>`;
+}
+function logSVG() {
+  const U = unitsInfo(); if (!U.length) return '';
+  const tot = U.reduce((a, u) => a + u.t, 0); const H = 440, top = 16, bot = 38, colW = 150, left = 58, txtX = left + colW + 12, W = 500;
+  const ky = (H - top - bot) / tot; let y = H - bot; let g = '';
+  const defs = `<defs>
+    <pattern id="p-grav" width="14" height="12" patternUnits="userSpaceOnUse"><rect width="14" height="12" fill="#efe4cf"/><circle cx="4" cy="4" r="3" fill="none" stroke="#6d5a3a" stroke-width="1"/><circle cx="11" cy="9" r="2.3" fill="none" stroke="#6d5a3a" stroke-width="1"/></pattern>
+    <pattern id="p-sgrav" width="14" height="12" patternUnits="userSpaceOnUse"><rect width="14" height="12" fill="#f2e8cf"/><circle cx="4" cy="4" r="2.6" fill="none" stroke="#6d5a3a" stroke-width="1"/><circle cx="10" cy="9" r=".8" fill="#6d5a3a"/><circle cx="12" cy="3" r=".8" fill="#6d5a3a"/></pattern>
+    <pattern id="p-gsand" width="12" height="10" patternUnits="userSpaceOnUse"><rect width="12" height="10" fill="#f6edd2"/><circle cx="3" cy="3" r=".9" fill="#6d5a3a"/><circle cx="9" cy="7" r=".9" fill="#6d5a3a"/><circle cx="8" cy="2.5" r="2" fill="none" stroke="#6d5a3a"/></pattern>
+    <pattern id="p-sand" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#f8efd4"/><circle cx="2" cy="2" r=".9" fill="#6d5a3a"/><circle cx="6" cy="6" r=".9" fill="#6d5a3a"/></pattern>
+    <pattern id="p-mud" width="12" height="6" patternUnits="userSpaceOnUse"><rect width="12" height="6" fill="#ece6dc"/><line x1="1" y1="3" x2="8" y2="3" stroke="#6d6458" stroke-width="1"/></pattern>
+    <pattern id="p-soil" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="10" fill="#d9ccb6"/><path d="M0 10L10 0M-2 2L2 -2M8 12L12 8" stroke="#5a4a33" stroke-width="1"/></pattern>
+    <pattern id="p-cov" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#e6e8e0"/><path d="M0 8L8 0" stroke="#8a9180" stroke-width="1"/></pattern>
+  </defs>`;
+  U.forEach(u => {
+    const h = u.t * ky, T = TYPE[u.d.type]; const w = T ? T.w * colW : colW * 0.5;
+    y -= h;
+    g += `<rect x="${left}" y="${y}" width="${w}" height="${h}" fill="${T ? `url(#${T.pat})` : '#fff'}" stroke="#333" stroke-width="1"/>`;
+    if (h > 30) g += `<text x="${txtX}" y="${y + h / 2}" font-size="15" fill="#0b0b0b"><tspan x="${txtX}" dy="-0.2em" font-weight="650">Unit ${u.n} · ${nf(u.t, 2)} m</tspan><tspan x="${txtX}" dy="1.25em" fill="#52514e">${esc(T ? T.label.replace(/ \(.*\)/, '') : 'not described')}${u.d.colour ? ', ' + esc(u.d.colour) : ''}</tspan></text>`;
+  });
+  // height axis
+  const step = tot > 6 ? 1 : tot > 2.5 ? 0.5 : 0.25;
+  for (let v = 0; v <= tot + 1e-6; v += step) { const yy = H - bot - v * ky; g += `<line x1="${left - 6}" x2="${left}" y1="${yy}" y2="${yy}" stroke="#333"/><text x="${left - 9}" y="${yy}" text-anchor="end" dominant-baseline="middle" font-size="13" fill="#52514e">${nf(v, step < 1 ? 1 : 0)}</text>`; }
+  g += `<line x1="${left}" x2="${left}" y1="${top}" y2="${H - bot}" stroke="#333"/>`;
+  g += `<text transform="translate(14 ${(H - bot + top) / 2}) rotate(-90)" text-anchor="middle" font-size="13" fill="#52514e">Height above base (m)</text>`;
+  // grain-size scale
+  const ticks = [['mud', 'mud'], ['sand', 'sand'], ['gravel', 'gravel']];
+  g += `<line x1="${left}" x2="${left + colW}" y1="${H - bot}" y2="${H - bot}" stroke="#333"/>`;
+  ticks.forEach(([k, l]) => { const x = left + TYPE[k].w * colW; g += `<line x1="${x}" x2="${x}" y1="${H - bot}" y2="${H - bot + 5}" stroke="#333"/><text x="${x}" y="${H - bot + 17}" text-anchor="middle" font-size="13" fill="#52514e">${l}</text>`; });
+  g += `<text x="${left + colW / 2}" y="${H - 2}" text-anchor="middle" font-size="12.5" fill="#52514e">grain size →</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px" role="img" aria-label="Sediment log of the cliff, drawn to scale" font-family="system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">${defs}${g}</svg>`;
+}
+function out5() {
+  const U = unitsInfo(); if (!U.length) return '<p class="muted">Mark the boundaries in Step 3 first.</p>';
+  const tot = U.reduce((a, u) => a + u.t, 0); const miss = U.filter(u => !u.d.type).length;
+  return `${miss ? `<p class="flagbox">⚠ ${miss} unit${miss > 1 ? 's have' : ' has'} no sediment type yet — go back to Step 4.</p>` : ''}
+  <dl class="kv"><dt>Exposed height</dt><dd>${nf(tot, 2)} m (minimum estimate)</dd><dt>Number of units</dt><dd>${U.length}</dd></dl>
+  <div class="logwrap">${logSVG()}</div>
+  <p class="small muted">A sediment log is drawn so that wider columns mean coarser sediment. It is the standard way geologists sketch a section.</p>
+  <div class="tablehead"><h3>Unit descriptions</h3><button class="btn sm no-print" data-copy="t5">Copy table</button></div>
+  <div class="tablewrap"><table id="t5"><thead><tr><th>Unit</th><th>Thickness (m)</th><th class="l">Sediment</th><th class="l">Colour</th><th class="l">Notes</th></tr></thead><tbody>
+  ${U.slice().reverse().map(u => `<tr><td>Unit ${u.n}</td><td>${nf(u.t, 2)}</td><td class="l">${u.d.type ? esc(TYPE[u.d.type].label) : '–'}</td><td class="l">${esc(u.d.colour || '')}</td><td class="l">${esc(u.d.notes || '')}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function out6() {
+  const name = $('#student').value.trim();
+  return `<dl class="kv"><dt>Name</dt><dd>${name ? esc(name) : '<span class="flag">⚠ add your name at the top</span>'}</dd></dl>
+  <p class="small muted">The printout has the marked-up photo, your scale working, thicknesses, sediment log and descriptions. Choose <b>Save as PDF</b> in the print window. Use it as your annotated sketch of the cliff.</p>
+  <button class="btn primary" data-act="print">Print / save as PDF</button>
+  <h3>Data</h3><div class="btns"><button class="btn" data-act="csv">Download units (.csv)</button><button class="btn" data-act="copyCsv">Copy units</button></div>`;
+}
+function update() {
+  save(); renderNav(); renderBar();
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', Number(p.dataset.step) === step));
+  $('#out1').innerHTML = out1(); $('#out2').innerHTML = out2(); $('#out3').innerHTML = out3();
+  if (step !== 4 || !$('#out4').contains(document.activeElement)) $('#out4').innerHTML = out4();
+  $('#out5').innerHTML = out5(); $('#out6').innerHTML = out6(); draw();
+}
+
+/* events */
+document.addEventListener('click', e => {
+  const go = e.target.closest('[data-go]'); if (go) { step = Number(go.dataset.go); pending = null; update(); return; }
+  const sb = e.target.closest('.step-btn'); if (sb) { step = Number(sb.dataset.step); pending = null; update(); return; }
+  const cp = e.target.closest('[data-copy]'); if (cp) { copyText(tsv(document.getElementById(cp.dataset.copy)), 'Table copied.'); return; }
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  switch (a.dataset.act) {
+    case 'zin': view.z *= 1.6; clampView(); draw(); break;
+    case 'zout': view.z /= 1.6; clampView(); draw(); break;
+    case 'zfit': fit(); draw(); break;
+    case 'redoScale': S.scale = null; pending = null; update(); break;
+    case 'undoB': S.bnds.pop(); update(); break;
+    case 'clearB': if (confirm('Delete all the boundaries?')) { S.bnds = []; update(); } break;
+    case 'print': preparePrint(); setTimeout(() => print(), 60); break;
+    case 'csv': download(csv(), `cliff-section_${photo.id}.csv`); break;
+    case 'copyCsv': copyText(csv(), 'Units copied.'); break;
+    case 'closeModal': $('#modal').style.display = 'none'; break;
+  }
+});
+document.addEventListener('input', e => { const u = e.target.dataset && e.target.dataset.u; if (u != null) { syncUnits(); S.units[Number(u)][e.target.dataset.f] = e.target.value; save(); renderNav(); $('#out5').innerHTML = out5(); } });
+document.addEventListener('keydown', e => { if (e.target.closest('input,select,textarea')) return; if (e.key === 'Escape') { pending = null; update(); } if (step === 3 && e.key === 'Backspace') { e.preventDefault(); S.bnds.pop(); update(); } });
+$('#refH').addEventListener('input', e => { const v = Number(e.target.value); if (v > 0) { S.refH = v; update(); } });
+$('#student').addEventListener('input', e => { store.set('pebblecount:student', e.target.value); $('#out6').innerHTML = out6(); });
+$('#photoSel').addEventListener('change', e => { const p = PHOTOS.find(x => x.id === e.target.value); if (p) loadPhoto(p); });
+
+function csv() {
+  const s = mpp(); const L = [`# Cliff section — ${photo.label}`, `# Student,"${$('#student').value.trim().replace(/"/g, '""')}"`, `# Person height (m),${S.refH}`, `# metres per pixel,${s ? s.mpp.toFixed(6) : ''}`, 'unit,thickness_m,height_px,sediment,colour,notes'];
+  unitsInfo().forEach(u => L.push([u.n, u.t != null ? u.t.toFixed(3) : '', u.dy.toFixed(1), u.d.type ? TYPE[u.d.type].label : '', u.d.colour || '', u.d.notes || ''].map(v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(',')));
+  return L.join('\r\n') + '\r\n';
+}
+function tsv(t) { return t ? [...t.querySelectorAll('tr')].map(r => [...r.children].map(c => c.textContent.replace(/\s+/g, ' ').trim()).join('\t')).join('\n') : ''; }
+function copyText(t, m) { const fb = () => { $('#modalText').value = t; $('#modal').style.display = 'grid'; $('#modalText').select(); }; if (navigator.clipboard && isSecureContext) navigator.clipboard.writeText(t).then(() => toast(m), fb); else fb(); }
+function download(t, n) { try { const u = URL.createObjectURL(new Blob([t], { type: 'text/csv;charset=utf-8' })); const a = document.createElement('a'); a.href = u; a.download = n; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); toast('Download started: ' + n); } catch (e) { copyText(t, ''); } }
+let tt = 0; function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 3200); }
+function preparePrint() {
+  update();
+  const name = $('#student').value.trim(), d = new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' });
+  $('#printHead').innerHTML = `<h1 style="font-size:16pt;margin:0 0 4pt">Orere Point cliff section</h1><p style="margin:0 0 8pt"><b>${name ? esc(name) : 'Name: ____________________'}</b> · ${esc(photo.label)} · ${d}</p>`;
+  const fig = $('#printFig'); fig.innerHTML = '';
+  try { const w = Math.min(photo.W, 2000), f = w / photo.W, h = Math.round(photo.H * f); const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.drawImage(img, 0, 0, w, h); overlay(x, (a, b) => [a * f, b * f], Math.max(1, w / 1000), false); const im = new Image(); im.src = c.toDataURL('image/jpeg', .88); im.alt = 'Cliff photo with unit boundaries'; fig.appendChild(im); }
+  catch (e) { fig.innerHTML = '<p class="small">(The marked-up photo could not be added in this browser.)</p>'; }
+}
+addEventListener('beforeprint', () => { if (!$('#printFig').firstChild) preparePrint(); });
+addEventListener('afterprint', () => { $('#printFig').innerHTML = ''; });
+
+function loadPhoto(p) {
+  const im = new Image();
+  im.onload = () => { img = im; photo = { id: p.id, label: p.label, W: im.naturalWidth, H: im.naturalHeight }; S = load(p); pending = null; $('#refH').value = S.refH; store.set('section:last', p.id); fit(); resize(); update(); };
+  im.onerror = () => toast('Could not load the photo.');
+  im.src = p.src;
+}
+const qp = new URLSearchParams(location.search).get('photo');
+const first = PHOTOS.find(p => p.id === qp) || PHOTOS.find(p => p.id === store.get('section:last')) || PHOTOS[0];
+$('#photoSel').innerHTML = PHOTOS.map(p => `<option value="${p.id}"${p === first ? ' selected' : ''}>${esc(p.label)}</option>`).join('');
+$('#student').value = store.get('pebblecount:student') || '';
+S = fresh(first); renderNav(); renderBar();
+addEventListener('resize', resize);
+let lw = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { const w = $('#viewer').clientWidth; if (w !== lw) { lw = w; resize(); } }).observe($('#viewer'));
+loadPhoto(first);
+})();
+</script>
+</body>
+</html>
