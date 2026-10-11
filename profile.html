@@ -89,15 +89,48 @@ details{margin-top:12px} details summary{cursor:pointer;color:var(--ink-2);font-
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;font-size:14px;z-index:70;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 .print-only{display:none}
+
+/* ---- Think it through ---- */
+.tt-q{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;background:#fff}
+.tt-q.done{border-color:#9cc7a9}
+.tt-h{display:flex;gap:10px;align-items:flex-start;font-size:14.5px}
+.tt-n{flex:0 0 auto;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);font-weight:650;font-size:13px}
+.tt-q.done .tt-n{background:var(--ok-bg);color:var(--ok-ink)}
+.tt-q textarea{width:100%;font:inherit;font-size:14px;line-height:1.45;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px;resize:vertical;background:#fff;color:var(--ink)}
+.tt-wc{font-size:12.5px;color:var(--ink-3);text-align:right}
+.tt-q.done .tt-wc{color:var(--ok-ink)}
+.tt-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.tt-row input{font:600 16px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;width:120px;padding:6px 9px;border:1px solid var(--line);border-radius:8px}
+.tt-opts{display:flex;flex-direction:column;gap:4px;margin:8px 0;font-size:14px}
+.tt-opts label{display:flex;gap:8px;align-items:center}
+.tt-fb{font-size:13.5px;margin-top:6px;min-height:1em}
+.tt-fb.ok{color:var(--ok-ink)} .tt-fb.bad{color:#8a1c12}
+.tt-gate{background:var(--warn-bg);color:var(--warn-ink);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13.5px}
+.tt-gate ul{margin:4px 0 0;padding-left:18px}
+.print-only{display:none}
 @media print{
-  @page{margin:14mm}
-  body{background:#fff;font-size:10.5pt}
+  .tt-print h3{font-size:11.5pt;margin:8pt 0 3pt}
+  .tt-print .q{margin:0 0 8pt;break-inside:avoid}
+  .tt-print .q .p{font-weight:650;margin:0 0 2pt}
+  .tt-print .q .a{margin:0;padding:4pt 6pt;border-left:2pt solid #888;white-space:pre-wrap}
+  .pb{break-before:page}
+}
+
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--ink-2)}
+.btn[disabled]{opacity:.45;cursor:default}
+@media print{
+  @page{margin:13mm}
+  body{background:#fff;font-size:10pt}
   .app{padding:0;max-width:none}
-  .no-print,nav.steps,.stopbar,.toast,#tip,#modal,.panel{display:none!important}
-  .print-only{display:block}
+  .app > *:not(#printOut), #tip, #modal, .toast{display:none!important}
+  #printOut{display:block!important}
+  #printOut h1{font-size:15pt;margin:0 0 2pt}
+  #printOut h2{font-size:12.5pt;margin:8pt 0 4pt}
+  #printOut .chart{max-width:175mm}
+  #printOut table{font-size:8.8pt;margin:0 0 4pt}
+  #printOut th,#printOut td{padding:1.8pt 5pt}
   .tablewrap{border:0;overflow:visible}
   tr,.chart,.calc{break-inside:avoid}
-  h2,h3{break-after:avoid}
   .pstop{break-before:page}
   .calc,.note{border:1px solid #ccc}
 }
@@ -184,7 +217,14 @@ details{margin-top:12px} details summary{cursor:pointer;color:var(--ink-2);font-
   </section>
 
   <section class="panel" data-step="7">
-    <h2>7 · Hand in your work</h2>
+    <h2>7 · Think it through</h2>
+    <p class="muted small">Answer these before you print. Your answers are printed with your results, so write them as you would for your report.</p>
+    <div id="outThink"></div>
+    <div class="btns" style="margin-top:8px"><button class="btn primary" data-step="8">Next: hand in →</button></div>
+  </section>
+
+  <section class="panel" data-step="8">
+    <h2>8 · Hand in your work</h2>
     <div id="out7"></div>
   </section>
 </div>
@@ -214,7 +254,7 @@ const STOPS = {
     abney: [[0, 0], [11.11, 2.97], [11.53, 3.10], [11.99, 3.13], [17.78, 3.95], [18.56, 3.94]] }
 };
 const ORDER = ['A2', 'A3', 'A4'];
-const STEPS = ['Field book', 'Check', 'Distances', 'Heights', 'Profile & slope', 'Compare beaches', 'Hand in'];
+const STEPS = ['Field book', 'Check', 'Distances', 'Heights', 'Profile & slope', 'Compare beaches', 'Think it through', 'Hand in'];
 const TOL = 0.005; // m — booking check tolerance
 
 /* ---------- helpers ---------- */
@@ -227,7 +267,7 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
 
 /* ---------- state ---------- */
 function freshStop(k) { const rows = STOPS[k].rows.map(r => r.slice()); return { rows, water: rows.length - 1, top: null, bot: null }; }
-function fresh() { const s = { v: 1, stop: 'A2', showAbney: false, stops: {} }; ORDER.forEach(k => s.stops[k] = freshStop(k)); return s; }
+function fresh() { const s = { v: 1, stop: 'A2', showAbney: false, stops: {}, answers: {}, printFull: false }; ORDER.forEach(k => s.stops[k] = freshStop(k)); return s; }
 let S = fresh();
 try { const s = JSON.parse(store.get('beachprofile:v1')); if (s && s.v === 1) { S = Object.assign(fresh(), s); ORDER.forEach(k => { if (!S.stops[k]) S.stops[k] = freshStop(k); }); } } catch (e) { }
 const qs = new URLSearchParams(location.search); if (STOPS[qs.get('stop')]) S.stop = qs.get('stop');
@@ -312,7 +352,7 @@ function legend(items) {
 function renderNav() {
   $('#nav').innerHTML = STEPS.map((t, i) => `<button type="button" class="step-btn" data-step="${i + 1}" ${i + 1 === step ? 'aria-current="step"' : ''}><span class="n">${i + 1}</span>${t}</button>`).join('');
   $('#stopSeg').innerHTML = ORDER.map(k => `<button type="button" data-stop="${k}" aria-pressed="${k === S.stop}">${STOPS[k].name} <span class="small" style="opacity:.75">${STOPS[k].code}</span></button>`).join('');
-  $('#stopbar').style.display = step === 6 || step === 7 ? 'none' : '';
+  $('#stopbar').style.display = step >= 6 ? 'none' : '';
   $('#stopNote').textContent = STOPS[S.stop].place;
 }
 function stationOpts(R, sel) { return R.rows.map(r => `<option value="${r.i}"${r.i === sel ? ' selected' : ''}>Station ${esc(r.st)}</option>`).join(''); }
@@ -321,7 +361,7 @@ function render1() {
   $('#fbTitle').textContent = `Field book — ${STOPS[S.stop].name} (${STOPS[S.stop].code})`;
   $('#fbNote').innerHTML = st.source === 'sim'
     ? 'These are <b>your own readings</b> from the level simulator. To go back to the 2025 group’s readings, press “Reset to class data”.'
-    : 'These are real readings from a group on the 11 October 2025 trip. You can type over them with your own group’s readings — your changes are saved in this browser.';
+    : 'These are real readings from a group on the 11 October 2025 trip. You don’t need to change anything: the builder does all the calculations. Look over Steps 1–4, then choose the beach face in Step 5. (If you surveyed this beach yourself, you can type your own readings over these.)';
   $('#t1').innerHTML = `<thead><tr><th>Station</th><th>Upper (m)</th><th>Middle (m)</th><th>Lower (m)</th><th class="l">Notes</th></tr></thead><tbody>` +
     st.rows.map((r, i) => `<tr><td>${esc(r[0])}</td>${[1, 2, 3].map(c => `<td><input type="text" inputmode="decimal" data-cell="${i},${c}" value="${esc(r[c])}" aria-label="Station ${esc(r[0])} ${['', 'upper', 'middle', 'lower'][c]}"></td>`).join('')}<td class="l"><input type="text" class="note-in" data-cell="${i},4" value="${esc(r[4])}" aria-label="Station ${esc(r[0])} notes"></td></tr>`).join('') + '</tbody>';
 }
@@ -382,20 +422,14 @@ function out6() {
   <div class="tablehead"><h3>Summary (dumpy level)</h3><button class="btn sm no-print" data-copy="t6">Copy table</button></div>
   <div class="tablewrap"><table id="t6"><thead><tr><th>Stop</th><th>Beach face slope</th><th>Beach face width (m)</th><th>Highest point above water (m)</th><th>Profile length (m)</th></tr></thead><tbody>${rows}</tbody></table></div>
   <p class="small muted">Beach face values use the top and bottom stations you chose for each stop in Step 5.</p>
-  <h3>Think about</h3>
-  <ul class="small" style="padding-left:18px;margin:4px 0">
-    <li>How do the slope and width of the beach face change from north (Waharau) to south (Taramaire)? How does that match the change in grain size?</li>
-    <li>Why does Waharau have a ridge with a low area behind it?</li>
-    ${S.showAbney ? '<li>The Abney-level group got different profiles at the same beaches. List three reasons why (method, where the transect was placed, the tide when they measured).</li>' : '<li>Tick the box above to see another group’s profiles. Why might they differ from these?</li>'}
-  </ul>`;
+  ${S.showAbney ? '' : '<p class="small muted">Tick the box above to see another group’s profiles at the same beaches.</p>'}`;
 }
 function out7() {
   const name = $('#student').value.trim();
   return `<dl class="kv"><dt>Name</dt><dd>${name ? esc(name) : '<span class="flag">⚠ add your name at the top</span>'}</dd></dl>
-  <h3>Worked pages</h3><p class="small muted">Prints every step for all three stops, plus the comparison graph. In the print window choose <b>Save as PDF</b>.</p>
-  <button class="btn primary" data-act="print">Print / save worked pages as PDF</button>
-  <h3>Data for your own spreadsheet</h3><p class="small muted">All three stops: raw readings plus the distances and heights worked out here.</p>
-  <div class="btns"><button class="btn" data-act="csv">Download data (.csv)</button><button class="btn" data-act="copyCsv">Copy data</button></div>
+  <h3>Results summary (2 pages)</h3><p class="small muted">Page 1: the three profiles, the summary table and your Waharau field book. Page 2: your answers to “Think it through”. In the print window choose <b>Save as PDF</b>.</p>
+  ${TT.gate(thinkQs(), S.answers || {}, '<button class="btn sm" data-step="7" style="margin-top:6px">Go to Think it through</button>')}
+  <div class="btns"><button class="btn primary" data-act="print" ${TT.missing(thinkQs(), S.answers || {}).length ? 'disabled' : ''}>Print / save results as PDF</button></div>
   <p class="small muted" style="margin-top:14px">Any changes you made to the field book are saved in this browser on this device.</p>`;
 }
 function update() {
@@ -408,11 +442,106 @@ function update() {
   $('#topSel').innerHTML = stationOpts(R, R.top); $('#botSel').innerHTML = stationOpts(R, R.bot);
   $('#out5a').innerHTML = out5a(R); $('#out5b').innerHTML = out5b(R);
   $('#showAbney').checked = !!S.showAbney; $('#out6').innerHTML = out6(); $('#out7').innerHTML = out7();
+  if (!S.answers) S.answers = {};
+  if (!TT.typing($('#outThink'))) $('#outThink').innerHTML = TT.html(thinkQs(), S.answers);
+}
+
+/* ---------- Think it through (shared component) ---------- */
+const TT = (() => {
+  const e = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const words = s => (String(s || '').trim().match(/\S+/g) || []).length;
+  const num = s => { const v = parseFloat(String(s).replace(',', '.')); return isFinite(v) ? v : NaN; };
+  function done(q, a) {
+    a = a || {};
+    if (q.type === 'text') return words(a.v) >= q.min;
+    if (q.type === 'number') return !!(a.ok || (a.tries || 0) >= 2);
+    if (q.type === 'choice') return !!a.checked;
+    return true;
+  }
+  function html(qs, A) {
+    return qs.map((q, i) => {
+      const a = A[q.id] || {}, d = done(q, a); let b = '';
+      if (q.type === 'text') b = `<textarea data-tt="${q.id}" rows="4" placeholder="Type your answer here…">${e(a.v)}</textarea><div class="tt-wc" data-wc="${q.id}">${words(a.v)} / ${q.min} words minimum</div>`;
+      if (q.type === 'number') {
+        const fin = a.ok || (a.tries || 0) >= 2;
+        b = `<div class="tt-row"><input data-tt="${q.id}" inputmode="decimal" value="${e(a.v)}" ${fin ? 'disabled' : ''} aria-label="Your answer"> <span>${e(q.unit || '')}</span> <button class="btn sm" data-ttcheck="${q.id}" ${fin ? 'disabled' : ''}>Check</button></div>
+          <div class="tt-fb ${a.ok ? 'ok' : a.msg ? 'bad' : ''}">${e(a.msg || '')}</div>${fin && q.reveal ? `<div class="calc">${q.reveal()}</div>` : ''}`;
+      }
+      if (q.type === 'choice') b = `<div class="tt-opts">${q.options.map((o, j) => `<label><input type="radio" name="tt_${q.id}" data-tt="${q.id}" value="${j}" ${String(a.v) === String(j) ? 'checked' : ''} ${a.checked ? 'disabled' : ''}> ${e(o)}</label>`).join('')}</div>
+          <button class="btn sm" data-ttcheck="${q.id}" ${a.checked ? 'disabled' : ''}>Check</button>
+          <div class="tt-fb ${a.checked ? (a.ok ? 'ok' : 'bad') : ''}">${e(a.msg || '')}</div>${a.checked && q.reveal ? `<div class="calc">${q.reveal()}</div>` : ''}`;
+      return `<div class="tt-q${d ? ' done' : ''}" data-ttq="${q.id}"><div class="tt-h"><span class="tt-n">${d ? '✓' : i + 1}</span><div>${q.prompt}</div></div>${q.hint ? `<p class="small muted" style="margin:6px 0 0 34px">${q.hint}</p>` : ''}${b}</div>`;
+    }).join('');
+  }
+  function check(q, A) {
+    const a = A[q.id] = A[q.id] || {};
+    if (q.type === 'number') {
+      const v = num(a.v); if (!isFinite(v)) { a.msg = 'Type a number first.'; return; }
+      a.tries = (a.tries || 0) + 1; const r = q.check(v); a.ok = r.ok;
+      a.msg = r.ok ? '✓ ' + (r.msg || 'Correct.') : (a.tries >= 2 ? '✗ ' + (r.msg || 'Not quite.') + ' The working is shown below.' : '✗ ' + (r.msg || 'Not quite — try again.'));
+    }
+    if (q.type === 'choice') {
+      if (a.v == null || a.v === '') { a.msg = 'Choose an answer first.'; return; }
+      a.checked = true; a.ok = Number(a.v) === q.answer(); a.msg = (a.ok ? '✓ ' : '✗ ') + q.explain(Number(a.v));
+    }
+  }
+  function missing(qs, A) { return qs.filter(q => !done(q, A[q.id])); }
+  function printHTML(qs, A) {
+    return qs.map((q, i) => {
+      const a = A[q.id] || {}; let ans = '';
+      if (q.type === 'text') ans = a.v ? e(a.v) : '<i>(not answered)</i>';
+      if (q.type === 'number') ans = a.v != null && a.v !== '' ? `${e(a.v)} ${e(q.unit || '')} — ${a.ok ? 'correct' : (a.tries >= 2 ? 'incorrect after two tries; working: ' + q.reveal().replace(/<[^>]+>/g, '') : 'not checked')}` : '<i>(not answered)</i>';
+      if (q.type === 'choice') ans = a.v != null ? `${e(q.options[a.v])}${a.checked ? ' — ' + e(a.msg.replace(/^[✓✗] /, '')) : ''}` : '<i>(not answered)</i>';
+      return `<div class="q"><p class="p">${i + 1}. ${q.prompt.replace(/<[^>]+>/g, '')}</p><p class="a">${ans}</p></div>`;
+    }).join('');
+  }
+  // wire events: getQs() -> questions, A -> answers object, save(), refresh()
+  function wire(root, getQs, getA, save, refresh) {
+    root.addEventListener('input', ev => {
+      const id = ev.target.dataset && ev.target.dataset.tt; if (!id) return;
+      const A = getA(); A[id] = A[id] || {}; A[id].v = ev.target.value; save();
+      const q = getQs().find(x => x.id === id); if (!q) return;
+      const box = root.querySelector(`[data-ttq="${id}"]`);
+      if (q.type === 'text') { const wc = root.querySelector(`[data-wc="${id}"]`); if (wc) wc.textContent = `${words(A[id].v)} / ${q.min} words minimum`; }
+      if (box) { const d = done(q, A[id]); box.classList.toggle('done', d); const n = box.querySelector('.tt-n'); if (n) n.textContent = d ? '✓' : getQs().findIndex(x => x.id === id) + 1; }
+      refresh(false);
+    });
+    root.addEventListener('change', ev => { const id = ev.target.dataset && ev.target.dataset.tt; if (id && ev.target.type === 'radio') { const A = getA(); A[id] = A[id] || {}; A[id].v = ev.target.value; save(); } });
+    root.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-ttcheck]'); if (!b) return;
+      const q = getQs().find(x => x.id === b.dataset.ttcheck); if (!q) return;
+      check(q, getA()); save(); refresh(true);
+    });
+  }
+  function gate(qs, A, goStepHtml) {
+    const m = missing(qs, A);
+    if (!m.length) return '';
+    return `<div class="tt-gate">Before you can print, finish the questions in <b>Think it through</b>:<ul>${m.map(q => `<li>${q.prompt.replace(/<[^>]+>/g, '').slice(0, 90)}${q.prompt.length > 90 ? '…' : ''}</li>`).join('')}</ul>${goStepHtml || ''}</div>`;
+  }
+  // true while the student is typing in a question box (don't re-render under them)
+  const typing = root => { const a = document.activeElement; return !!(a && root.contains(a) && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && a.type !== 'radio' && a.type !== 'checkbox'))); };
+  return { html, check, done, missing, printHTML, wire, gate, words, typing };
+})();
+
+function thinkQs() {
+  const R = reduce('A2'), n = R.rows.length, st = R.rows[Math.min(3, n - 2)], W = R.W;
+  const faces = ORDER.map(k => { const r = reduce(k); return r.face ? `${STOPS[k].name}: top station ${r.face.T.st}, bottom station ${r.face.B.st}` : `${STOPS[k].name}: not chosen`; }).join(' · ');
+  return [
+    { id: 'p_h', type: 'number', unit: 'm', prompt: `At <b>Waharau</b>, work out by hand how high <b>station ${st.st}</b> is above the water’s edge (station ${W.st}). Use the middle readings in your field book (Step 1).`,
+      hint: 'The line of sight is level, so a smaller middle reading means higher ground.',
+      check: v => Math.abs(v - st.z) <= 0.002 ? { ok: true } : { ok: false, msg: Math.abs(v + st.z) <= 0.002 ? 'Right size, wrong sign — which point is higher?' : 'Not quite.' },
+      reveal: () => `height = middle at water’s edge − middle at station ${st.st} = ${nf(W.m, 3)} − ${nf(st.m, 3)} = ${nf(st.z, 3)} m` },
+    { id: 'p_d', type: 'number', unit: 'm', prompt: `And how far is station ${st.st} from the water’s edge? Use the upper and lower readings.`,
+      hint: 'First work out each station’s distance from the level: 100 × (upper − lower).',
+      check: v => Math.abs(v - st.x) <= 0.05 ? { ok: true } : { ok: false, msg: 'Not quite.' },
+      reveal: () => `distance from level: station ${W.st} = 100 × (${nf(W.u, 3)} − ${nf(W.l, 3)}) = ${nf(W.d, 2)} m; station ${st.st} = 100 × (${nf(st.u, 3)} − ${nf(st.l, 3)}) = ${nf(st.d, 2)} m<br>distance from water’s edge = ${nf(W.d, 2)} − ${nf(st.d, 2)} = ${nf(st.x, 2)} m` },
+    { id: 'p_trend', type: 'text', min: 30, prompt: 'Describe how the beach face slope and width change from Waharau (north) to Taramaire (south). Quote numbers from your summary table.' },
+  ];
 }
 
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
-  const sb = e.target.closest('.step-btn'); if (sb) { step = Number(sb.dataset.step); update(); return; }
+  const sb = e.target.closest('.step-btn, button[data-step]'); if (sb) { step = Number(sb.dataset.step); update(); window.scrollTo(0, 0); return; }
   const so = e.target.closest('[data-stop]'); if (so) { S.stop = so.dataset.stop; update(); return; }
   const cp = e.target.closest('[data-copy]'); if (cp) { copyText(tableTSV(document.getElementById(cp.dataset.copy)), 'Table copied — paste it into your spreadsheet.'); return; }
   const a = e.target.closest('[data-act]'); if (!a) return;
@@ -434,8 +563,9 @@ document.addEventListener('change', e => {
   if (e.target.id === 'topSel') { S.stops[S.stop].top = Number(e.target.value); update(); }
   if (e.target.id === 'botSel') { S.stops[S.stop].bot = Number(e.target.value); update(); }
   if (e.target.id === 'showAbney') { S.showAbney = e.target.checked; update(); }
+  if (e.target.id === 'printFull') { S.printFull = e.target.checked; save(); }
 });
-$('#student').addEventListener('input', e => { store.set('pebblecount:student', e.target.value); if (step === 7) $('#out7').innerHTML = out7(); });
+$('#student').addEventListener('input', e => { store.set('pebblecount:student', e.target.value); if (step === 8) $('#out7').innerHTML = out7(); });
 
 /* tooltip */
 const tipEl = $('#tip');
@@ -471,13 +601,25 @@ function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('s
 function preparePrint() {
   const name = $('#student').value.trim();
   const d = new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' });
-  const keep = S.stop;
-  let h = `<h1 style="font-size:16pt;margin:0 0 4pt">Beach profiles — Firth of Thames</h1><p style="margin:0 0 10pt"><b>${name ? esc(name) : 'Name: ____________________'}</b> · ${d} · dumpy-level survey, 11 October 2025</p>`;
-  h += `<h2 style="font-size:13pt">All three beaches on the same axes</h2>${out6()}`;
-  ORDER.forEach(k => {
+  const keep = S.stop, src = S.stops.A2 && S.stops.A2.source === 'sim' ? 'own readings from the level simulator' : 'readings from a 2025 group';
+  const Rs = ORDER.map(reduce);
+  const series = Rs.map(R => ({ label: `${STOPS[R.k].name}`, color: STOPS[R.k].color, pts: R.pts.map(r => ({ x: r.x, z: r.z, label: r.st })) }));
+  if (S.showAbney) ORDER.forEach(k => series.push({ label: `${STOPS[k].name} — Abney (other group)`, color: STOPS[k].color, dash: true, pts: STOPS[k].abney.map(([x, z]) => ({ x, z })) }));
+  let xmax = 0, zmax = 0; series.forEach(s => s.pts.forEach(p => { xmax = Math.max(xmax, p.x); zmax = Math.max(zmax, p.z); }));
+  const chart = profileChart(series, { xmax: Math.ceil((xmax + 1) / 5) * 5, zmax: Math.ceil((zmax + 0.25) * 2) / 2, zmin: -0.5, aria: 'Beach profiles' });
+  const sum = Rs.map(R => `<tr><td>${STOPS[R.k].name} (${STOPS[R.k].code})</td><td>${R.face ? nf(R.face.slope, 1) + '°' : '–'}</td><td>${R.face ? nf(R.face.width, 1) : '–'}</td><td>${R.face ? R.face.T.st + ' → ' + R.face.B.st : '–'}</td><td>${nf(R.maxZ, 2)}</td><td>${nf(R.len, 1)}</td></tr>`).join('');
+  const W = reduce('A2');
+  const fb = W.rows.map(r => `<tr><td>${esc(r.st)}</td><td>${nf(r.u, 3)}</td><td>${nf(r.m, 3)}</td><td>${nf(r.l, 3)}</td><td>${isFinite(r.diff) ? nf(r.diff * 1000, 1) : ''}</td><td>${nf(r.d, 2)}</td><td>${nf(r.x, 2)}</td><td>${nf(r.z, 3)}</td></tr>`).join('');
+  const srcs = ORDER.map(k => `${STOPS[k].name}: ${S.stops[k] && S.stops[k].source === 'sim' ? 'own readings (simulator)' : '2025 group readings'}`).join(' · ');
+  let h = `<h1>Beach profiles — Firth of Thames</h1><p class="small"><b>${name ? esc(name) : 'Name: ____________________'}</b> · ${d}<br>${srcs}</p>
+    <h2>The three beaches on the same axes</h2>${legend(series.map(s => ({ label: s.label, color: s.color, dash: s.dash })))}${chart}
+    <h2>Summary</h2><table><thead><tr><th>Stop</th><th>Beach face slope</th><th>Width (m)</th><th>Stations (top → bottom)</th><th>Highest point (m)</th><th>Profile length (m)</th></tr></thead><tbody>${sum}</tbody></table>
+    <h2>Field book and reduced levels — Waharau</h2><table><thead><tr><th>Station</th><th>Upper</th><th>Middle</th><th>Lower</th><th>Check (mm)</th><th>Dist. from level (m)</th><th>Dist. from water (m)</th><th>Height above water (m)</th></tr></thead><tbody>${fb}</tbody></table>
+    <div class="pb"><h2>Your analysis</h2><div class="tt-print">${TT.printHTML(thinkQs(), S.answers || {})}</div></div>`;
+  // The 2-page summary is all that is handed in; the full per-beach working is no longer printed.
+  if (false) ORDER.forEach(k => {
     S.stop = k; const R = reduce(k);
-    h += `<div class="pstop"><h2 style="font-size:14pt;margin:0 0 6pt">${STOPS[k].name} (${STOPS[k].code}) — ${STOPS[k].place}</h2>
-      <h3>Check the readings</h3>${out2(R)}<h3>Distances</h3>${out3(R)}<h3>Heights</h3>${out4(R)}<h3>Profile and beach face</h3>${out5a(R)}${out5b(R)}</div>`;
+    h += `<div class="pstop"><h2>${STOPS[k].name} (${STOPS[k].code}) — full working</h2><h3>Check the readings</h3>${out2(R)}<h3>Distances</h3>${out3(R)}<h3>Heights</h3>${out4(R)}<h3>Profile and beach face</h3>${out5a(R)}${out5b(R)}</div>`;
   });
   S.stop = keep;
   $('#printOut').innerHTML = h.replace(/ id="t\d+b?"/g, '');
@@ -486,6 +628,7 @@ window.addEventListener('beforeprint', () => { if (!$('#printOut').firstChild) p
 window.addEventListener('afterprint', () => { $('#printOut').innerHTML = ''; });
 
 $('#student').value = store.get('pebblecount:student') || '';
+TT.wire($('#outThink'), thinkQs, () => (S.answers = S.answers || {}), save, full => { if (full) update(); else { renderNav(); $('#out7').innerHTML = out7(); } });
 update();
 })();
 </script>

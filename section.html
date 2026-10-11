@@ -90,19 +90,46 @@ thead th{background:var(--surface-2);color:var(--ink-2);font-weight:600;font-siz
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;font-size:14px;z-index:70;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 .print-only{display:none}
+
+/* ---- Think it through ---- */
+.tt-q{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;background:#fff}
+.tt-q.done{border-color:#9cc7a9}
+.tt-h{display:flex;gap:10px;align-items:flex-start;font-size:14.5px}
+.tt-n{flex:0 0 auto;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);font-weight:650;font-size:13px}
+.tt-q.done .tt-n{background:var(--ok-bg);color:var(--ok-ink)}
+.tt-q textarea{width:100%;font:inherit;font-size:14px;line-height:1.45;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px;resize:vertical;background:#fff;color:var(--ink)}
+.tt-wc{font-size:12.5px;color:var(--ink-3);text-align:right}
+.tt-q.done .tt-wc{color:var(--ok-ink)}
+.tt-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.tt-row input{font:600 16px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;width:120px;padding:6px 9px;border:1px solid var(--line);border-radius:8px}
+.tt-opts{display:flex;flex-direction:column;gap:4px;margin:8px 0;font-size:14px}
+.tt-opts label{display:flex;gap:8px;align-items:center}
+.tt-fb{font-size:13.5px;margin-top:6px;min-height:1em}
+.tt-fb.ok{color:var(--ok-ink)} .tt-fb.bad{color:#8a1c12}
+.tt-gate{background:var(--warn-bg);color:var(--warn-ink);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13.5px}
+.tt-gate ul{margin:4px 0 0;padding-left:18px}
+.print-only{display:none}
 @media print{
-  @page{margin:14mm}
-  body{background:#fff;font-size:10.5pt}
+  .tt-print h3{font-size:11.5pt;margin:8pt 0 3pt}
+  .tt-print .q{margin:0 0 8pt;break-inside:avoid}
+  .tt-print .q .p{font-weight:650;margin:0 0 2pt}
+  .tt-print .q .a{margin:0;padding:4pt 6pt;border-left:2pt solid #888;white-space:pre-wrap}
+  .pb{break-before:page}
+}
+
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--ink-2)}
+@media print{
+  @page{margin:13mm}
+  body{background:#fff;font-size:10pt}
   .app{padding:0;max-width:none}
-  .no-print,nav.steps,.actionbar,.viewer,.legendbar,.toast,#modal{display:none!important}
-  .print-only{display:block}
-  .work{display:block}
-  .panelwrap{position:static;max-height:none;overflow:visible}
-  .panel{display:block!important;border:0;border-top:1px solid #bbb;border-radius:0;padding:10pt 0 0;margin:0 0 10pt}
-  .panel[data-step="6"]{display:none!important}
-  .tablewrap{border:0;overflow:visible}
-  tr,.unitcard,svg,figure{break-inside:avoid}
-  #printFig img{width:100%;height:auto;display:block}
+  .app > *:not(#printOut), #modal, .toast{display:none!important}
+  #printOut{display:block!important}
+  #printOut h1{font-size:15pt;margin:0 0 2pt}
+  #printOut h2{font-size:12.5pt;margin:8pt 0 4pt}
+  #printOut img.photo{display:block;width:100%;max-height:110mm;object-fit:contain;margin:0 0 6pt}
+  #printOut .log svg{max-height:120mm;width:auto;max-width:100%}
+  #printOut table{font-size:9pt}
+  #printOut th,#printOut td{padding:2pt 5pt}
 }
 </style>
 </head>
@@ -112,6 +139,7 @@ thead th{background:var(--surface-2);color:var(--ink-2);font-weight:600;font-siz
     <div><h1>Cliff section logger</h1><p class="sub">Measure and describe the layers in a cliff — Orere Point, Firth of Thames virtual field trip.</p></div>
     <div class="namebox no-print"><label>Your name <input type="text" id="student" autocomplete="off" placeholder="First and last name" size="22"></label></div>
   </header>
+  <div class="print-only" id="printOut"></div>
   <div class="print-only" id="printHead"></div>
   <figure class="print-only" id="printFig" style="margin:0 0 10pt"></figure>
   <nav class="steps no-print" id="nav" aria-label="Steps"></nav>
@@ -158,7 +186,13 @@ thead th{background:var(--surface-2);color:var(--ink-2);font-weight:600;font-siz
         <div id="out5"></div>
       </section>
       <section class="panel" data-step="6">
-        <h2>6 · Hand in your work</h2>
+        <h2>6 · Think it through</h2>
+        <p class="muted small">Answer these before you print. Your answers are printed with your log.</p>
+        <div id="outThink"></div>
+        <div class="btns" style="margin-top:8px"><button class="btn primary" data-go="7">Next: hand in →</button></div>
+      </section>
+      <section class="panel" data-step="7">
+        <h2>7 · Hand in your work</h2>
         <div id="out6"></div>
       </section>
     </div>
@@ -188,7 +222,7 @@ const TYPES = [
   ['gravel', 'Gravel (pebbles, cobbles)', 1.0, 'p-grav'],
 ];
 const TYPE = Object.fromEntries(TYPES.map(t => [t[0], { label: t[1], w: t[2], pat: t[3] }]));
-const STEPS = ['Photo', 'Scale', 'Boundaries', 'Describe', 'Log', 'Hand in'];
+const STEPS = ['Photo', 'Scale', 'Boundaries', 'Describe', 'Log', 'Think it through', 'Hand in'];
 const SCALE_COL = '#1baf7a';
 
 const $ = s => document.querySelector(s);
@@ -198,7 +232,7 @@ const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
 
 let img = null, photo = null, step = 1, S = null, pending = null, hover = null;
-function fresh(p) { return { v: 1, refH: p.refH || 1.65, scale: null, bnds: [], units: [] }; }
+function fresh(p) { return { v: 1, refH: p.refH || 1.65, scale: null, bnds: [], units: [], answers: {} }; }
 function save() { if (photo) store.set('section:' + photo.id, JSON.stringify(S)); }
 function load(p) { try { const s = JSON.parse(store.get('section:' + p.id)); if (s && s.v === 1) return Object.assign(fresh(p), s); } catch (e) { } return fresh(p); }
 
@@ -264,7 +298,7 @@ function onClick(x, y) {
 
 /* rendering */
 function renderNav() {
-  const done = [!!photo, !!mpp(), S.bnds.length > 1, unitsInfo().length > 0 && unitsInfo().every(u => u.d.type), unitsInfo().length > 0, false];
+  const done = [!!photo, !!mpp(), S.bnds.length > 1, unitsInfo().length > 0 && unitsInfo().every(u => u.d.type), unitsInfo().length > 0, unitsInfo().length > 0 && !TT.missing(thinkQs(), S.answers || {}).length, false];
   $('#nav').innerHTML = STEPS.map((t, i) => `<button type="button" class="step-btn${done[i] ? ' done' : ''}" data-step="${i + 1}" ${i + 1 === step ? 'aria-current="step"' : ''}><span class="n">${done[i] && i + 1 !== step ? '✓' : i + 1}</span>${t}</button>`).join('');
 }
 function renderBar() {
@@ -281,6 +315,7 @@ function renderBar() {
     btns = `<button class="btn" data-act="undoB" ${S.bnds.length ? '' : 'disabled'}>Undo last <kbd>⌫</kbd></button><button class="btn" data-act="clearB" ${S.bnds.length ? '' : 'disabled'}>Clear all</button>${S.bnds.length > 1 ? '<button class="btn primary" data-go="4">Next →</button>' : ''}`;
   } else if (step === 4) { ins = 'Describe each unit in the panel.'; hint = 'Zoom in on each one on the photo while you describe it.'; btns = '<button class="btn primary" data-go="5">Next →</button>'; }
   else if (step === 5) { ins = 'Your sediment log is drawn to scale.'; hint = 'Compare it with the photo — does it look right?'; btns = '<button class="btn primary" data-go="6">Next →</button>'; }
+  else if (step === 6) { ins = 'Think about what the cliff tells you.'; hint = 'Answer the questions in the panel. You need them before you can print.'; btns = '<button class="btn primary" data-go="7">Next →</button>'; }
   else { ins = 'Print or save your work.'; }
   $('#actionbar').innerHTML = `<div class="instr" aria-live="polite">${ins}${hint ? `<span class="hint">${hint}</span>` : ''}</div><div class="btns">${btns}</div>`;
 }
@@ -344,7 +379,7 @@ function logSVG() {
   g += `<line x1="${left}" x2="${left}" y1="${top}" y2="${H - bot}" stroke="#333"/>`;
   g += `<text transform="translate(14 ${(H - bot + top) / 2}) rotate(-90)" text-anchor="middle" font-size="13" fill="#52514e">Height above base (m)</text>`;
   // grain-size scale
-  const ticks = [['mud', 'mud'], ['sand', 'sand'], ['gravel', 'gravel']];
+  const ticks = [['mud', 'mud'], ['gravel', 'gravel']];
   g += `<line x1="${left}" x2="${left + colW}" y1="${H - bot}" y2="${H - bot}" stroke="#333"/>`;
   ticks.forEach(([k, l]) => { const x = left + TYPE[k].w * colW; g += `<line x1="${x}" x2="${x}" y1="${H - bot}" y2="${H - bot + 5}" stroke="#333"/><text x="${x}" y="${H - bot + 17}" text-anchor="middle" font-size="13" fill="#52514e">${l}</text>`; });
   g += `<text x="${left + colW / 2}" y="${H - 2}" text-anchor="middle" font-size="12.5" fill="#52514e">grain size →</text>`;
@@ -364,16 +399,108 @@ function out5() {
 function out6() {
   const name = $('#student').value.trim();
   return `<dl class="kv"><dt>Name</dt><dd>${name ? esc(name) : '<span class="flag">⚠ add your name at the top</span>'}</dd></dl>
-  <p class="small muted">The printout has the marked-up photo, your scale working, thicknesses, sediment log and descriptions. Choose <b>Save as PDF</b> in the print window. Use it as your annotated sketch of the cliff.</p>
-  <button class="btn primary" data-act="print">Print / save as PDF</button>
-  <h3>Data</h3><div class="btns"><button class="btn" data-act="csv">Download units (.csv)</button><button class="btn" data-act="copyCsv">Copy units</button></div>`;
+  <p class="small muted">Two pages. Page 1: the marked-up photo and your sediment log. Page 2: your unit descriptions and answers. Choose <b>Save as PDF</b> in the print window. Use it as your annotated sketch of the cliff.</p>
+  ${TT.gate(thinkQs(), S.answers || {}, '<button class="btn sm" data-go="6" style="margin-top:6px">Go to Think it through</button>')}
+  <button class="btn primary" data-act="print" ${unitsInfo().length && !TT.missing(thinkQs(), S.answers || {}).length ? '' : 'disabled'}>Print / save as PDF</button>`;
 }
 function update() {
   save(); renderNav(); renderBar();
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', Number(p.dataset.step) === step));
   $('#out1').innerHTML = out1(); $('#out2').innerHTML = out2(); $('#out3').innerHTML = out3();
   if (step !== 4 || !$('#out4').contains(document.activeElement)) $('#out4').innerHTML = out4();
-  $('#out5').innerHTML = out5(); $('#out6').innerHTML = out6(); draw();
+  $('#out5').innerHTML = out5(); $('#out6').innerHTML = out6();
+  if (!S.answers) S.answers = {};
+  if (!TT.typing($('#outThink'))) $('#outThink').innerHTML = unitsInfo().length ? TT.html(thinkQs(), S.answers) : '<p class="muted">Mark and describe the units first (Steps 2–4).</p>';
+  draw();
+}
+
+/* ---------- Think it through (shared component) ---------- */
+const TT = (() => {
+  const e = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const words = s => (String(s || '').trim().match(/\S+/g) || []).length;
+  const num = s => { const v = parseFloat(String(s).replace(',', '.')); return isFinite(v) ? v : NaN; };
+  function done(q, a) {
+    a = a || {};
+    if (q.type === 'text') return words(a.v) >= q.min;
+    if (q.type === 'number') return !!(a.ok || (a.tries || 0) >= 2);
+    if (q.type === 'choice') return !!a.checked;
+    return true;
+  }
+  function html(qs, A) {
+    return qs.map((q, i) => {
+      const a = A[q.id] || {}, d = done(q, a); let b = '';
+      if (q.type === 'text') b = `<textarea data-tt="${q.id}" rows="4" placeholder="Type your answer here…">${e(a.v)}</textarea><div class="tt-wc" data-wc="${q.id}">${words(a.v)} / ${q.min} words minimum</div>`;
+      if (q.type === 'number') {
+        const fin = a.ok || (a.tries || 0) >= 2;
+        b = `<div class="tt-row"><input data-tt="${q.id}" inputmode="decimal" value="${e(a.v)}" ${fin ? 'disabled' : ''} aria-label="Your answer"> <span>${e(q.unit || '')}</span> <button class="btn sm" data-ttcheck="${q.id}" ${fin ? 'disabled' : ''}>Check</button></div>
+          <div class="tt-fb ${a.ok ? 'ok' : a.msg ? 'bad' : ''}">${e(a.msg || '')}</div>${fin && q.reveal ? `<div class="calc">${q.reveal()}</div>` : ''}`;
+      }
+      if (q.type === 'choice') b = `<div class="tt-opts">${q.options.map((o, j) => `<label><input type="radio" name="tt_${q.id}" data-tt="${q.id}" value="${j}" ${String(a.v) === String(j) ? 'checked' : ''} ${a.checked ? 'disabled' : ''}> ${e(o)}</label>`).join('')}</div>
+          <button class="btn sm" data-ttcheck="${q.id}" ${a.checked ? 'disabled' : ''}>Check</button>
+          <div class="tt-fb ${a.checked ? (a.ok ? 'ok' : 'bad') : ''}">${e(a.msg || '')}</div>${a.checked && q.reveal ? `<div class="calc">${q.reveal()}</div>` : ''}`;
+      return `<div class="tt-q${d ? ' done' : ''}" data-ttq="${q.id}"><div class="tt-h"><span class="tt-n">${d ? '✓' : i + 1}</span><div>${q.prompt}</div></div>${q.hint ? `<p class="small muted" style="margin:6px 0 0 34px">${q.hint}</p>` : ''}${b}</div>`;
+    }).join('');
+  }
+  function check(q, A) {
+    const a = A[q.id] = A[q.id] || {};
+    if (q.type === 'number') {
+      const v = num(a.v); if (!isFinite(v)) { a.msg = 'Type a number first.'; return; }
+      a.tries = (a.tries || 0) + 1; const r = q.check(v); a.ok = r.ok;
+      a.msg = r.ok ? '✓ ' + (r.msg || 'Correct.') : (a.tries >= 2 ? '✗ ' + (r.msg || 'Not quite.') + ' The working is shown below.' : '✗ ' + (r.msg || 'Not quite — try again.'));
+    }
+    if (q.type === 'choice') {
+      if (a.v == null || a.v === '') { a.msg = 'Choose an answer first.'; return; }
+      a.checked = true; a.ok = Number(a.v) === q.answer(); a.msg = (a.ok ? '✓ ' : '✗ ') + q.explain(Number(a.v));
+    }
+  }
+  function missing(qs, A) { return qs.filter(q => !done(q, A[q.id])); }
+  function printHTML(qs, A) {
+    return qs.map((q, i) => {
+      const a = A[q.id] || {}; let ans = '';
+      if (q.type === 'text') ans = a.v ? e(a.v) : '<i>(not answered)</i>';
+      if (q.type === 'number') ans = a.v != null && a.v !== '' ? `${e(a.v)} ${e(q.unit || '')} — ${a.ok ? 'correct' : (a.tries >= 2 ? 'incorrect after two tries; working: ' + q.reveal().replace(/<[^>]+>/g, '') : 'not checked')}` : '<i>(not answered)</i>';
+      if (q.type === 'choice') ans = a.v != null ? `${e(q.options[a.v])}${a.checked ? ' — ' + e(a.msg.replace(/^[✓✗] /, '')) : ''}` : '<i>(not answered)</i>';
+      return `<div class="q"><p class="p">${i + 1}. ${q.prompt.replace(/<[^>]+>/g, '')}</p><p class="a">${ans}</p></div>`;
+    }).join('');
+  }
+  // wire events: getQs() -> questions, A -> answers object, save(), refresh()
+  function wire(root, getQs, getA, save, refresh) {
+    root.addEventListener('input', ev => {
+      const id = ev.target.dataset && ev.target.dataset.tt; if (!id) return;
+      const A = getA(); A[id] = A[id] || {}; A[id].v = ev.target.value; save();
+      const q = getQs().find(x => x.id === id); if (!q) return;
+      const box = root.querySelector(`[data-ttq="${id}"]`);
+      if (q.type === 'text') { const wc = root.querySelector(`[data-wc="${id}"]`); if (wc) wc.textContent = `${words(A[id].v)} / ${q.min} words minimum`; }
+      if (box) { const d = done(q, A[id]); box.classList.toggle('done', d); const n = box.querySelector('.tt-n'); if (n) n.textContent = d ? '✓' : getQs().findIndex(x => x.id === id) + 1; }
+      refresh(false);
+    });
+    root.addEventListener('change', ev => { const id = ev.target.dataset && ev.target.dataset.tt; if (id && ev.target.type === 'radio') { const A = getA(); A[id] = A[id] || {}; A[id].v = ev.target.value; save(); } });
+    root.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-ttcheck]'); if (!b) return;
+      const q = getQs().find(x => x.id === b.dataset.ttcheck); if (!q) return;
+      check(q, getA()); save(); refresh(true);
+    });
+  }
+  function gate(qs, A, goStepHtml) {
+    const m = missing(qs, A);
+    if (!m.length) return '';
+    return `<div class="tt-gate">Before you can print, finish the questions in <b>Think it through</b>:<ul>${m.map(q => `<li>${q.prompt.replace(/<[^>]+>/g, '').slice(0, 90)}${q.prompt.length > 90 ? '…' : ''}</li>`).join('')}</ul>${goStepHtml || ''}</div>`;
+  }
+  // true while the student is typing in a question box (don't re-render under them)
+  const typing = root => { const a = document.activeElement; return !!(a && root.contains(a) && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && a.type !== 'radio' && a.type !== 'checkbox'))); };
+  return { html, check, done, missing, printHTML, wire, gate, words, typing };
+})();
+
+function thinkQs() {
+  const U = unitsInfo(), sc = mpp(), qs = [];
+  if (U.length && sc) { const u = U[0];
+    qs.push({ id: 'c_scale', type: 'number', unit: 'm', prompt: `Check the scale yourself. Unit 1 is <b>${u.dy.toFixed(0)} pixels</b> tall in the photo, and the person (${nf(S.refH, 2)} m) is <b>${sc.px.toFixed(0)} pixels</b> tall. How thick is unit 1 in metres?`,
+      hint: 'Work out how many metres one pixel is, then multiply.',
+      check: v => Math.abs(v - u.t) <= 0.02 ? { ok: true } : { ok: false, msg: 'Not quite.' },
+      reveal: () => `metres per pixel = ${nf(S.refH, 2)} ÷ ${sc.px.toFixed(0)} = ${sc.mpp.toFixed(5)}<br>thickness = ${u.dy.toFixed(0)} × ${sc.mpp.toFixed(5)} = ${nf(u.t, 2)} m` }); }
+  qs.push({ id: 'c_q3', type: 'text', min: 25, prompt: '<b>Report Q3.</b> Were the gravels exposed in the cliff transported and deposited by a stream/alluvial fan from the Hunua Ranges? Provide reasons for your answer.', hint: 'Use your log: what rock are the stones, what shape are they, how well sorted, and are they in layers?' });
+  qs.push({ id: 'c_q4', type: 'text', min: 25, prompt: '<b>Report Q4.</b> If these gravel layers are fluvially emplaced and were graded to sea-level, what might this tell us about the changes that have occurred at this site?', hint: 'The river that laid the gravel flowed out to the sea at its level. Where is the gravel now, compared with the river and the sea today?' });
+  return qs;
 }
 
 /* events */
@@ -411,15 +538,20 @@ function copyText(t, m) { const fb = () => { $('#modalText').value = t; $('#moda
 function download(t, n) { try { const u = URL.createObjectURL(new Blob([t], { type: 'text/csv;charset=utf-8' })); const a = document.createElement('a'); a.href = u; a.download = n; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); toast('Download started: ' + n); } catch (e) { copyText(t, ''); } }
 let tt = 0; function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 3200); }
 function preparePrint() {
-  update();
-  const name = $('#student').value.trim(), d = new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' });
-  $('#printHead').innerHTML = `<h1 style="font-size:16pt;margin:0 0 4pt">Orere Point cliff section</h1><p style="margin:0 0 8pt"><b>${name ? esc(name) : 'Name: ____________________'}</b> · ${esc(photo.label)} · ${d}</p>`;
-  const fig = $('#printFig'); fig.innerHTML = '';
-  try { const w = Math.min(photo.W, 2000), f = w / photo.W, h = Math.round(photo.H * f); const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.drawImage(img, 0, 0, w, h); overlay(x, (a, b) => [a * f, b * f], Math.max(1, w / 1000), false); const im = new Image(); im.src = c.toDataURL('image/jpeg', .88); im.alt = 'Cliff photo with unit boundaries'; fig.appendChild(im); }
-  catch (e) { fig.innerHTML = '<p class="small">(The marked-up photo could not be added in this browser.)</p>'; }
+  const name = $('#student').value.trim(), d = new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' }), sc = mpp(), U = unitsInfo();
+  let ph = '';
+  try { const w = Math.min(photo.W, 1800), f = w / photo.W, h = Math.round(photo.H * f); const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.drawImage(img, 0, 0, w, h); overlay(x, (a, b) => [a * f, b * f], Math.max(1, w / 1000), false); ph = `<img class="photo" alt="Cliff photo with unit boundaries" src="${c.toDataURL('image/jpeg', .85)}">`; }
+  catch (er) { ph = '<p class="small">(The marked-up photo could not be added in this browser.)</p>'; }
+  const tot = U.reduce((a, u) => a + u.t, 0);
+  let h = `<h1>Orere Point cliff section</h1><p class="small"><b>${name ? esc(name) : 'Name: ____________________'}</b> · ${esc(photo.label)} · ${d} · scale from a ${nf(S.refH, 2)} m person = ${sc ? sc.mpp.toFixed(5) + ' m/pixel' : 'not set'} · exposed height ${nf(tot, 2)} m (minimum)</p>
+    ${ph}<h2>Sediment log</h2><div class="log">${logSVG()}</div>
+    <div class="pb"><h2>Units (top to bottom)</h2><table><thead><tr><th>Unit</th><th>Thickness (m)</th><th class="l">Sediment</th><th class="l">Colour</th><th class="l">Notes</th></tr></thead><tbody>
+    ${U.slice().reverse().map(u => `<tr><td>Unit ${u.n}</td><td>${nf(u.t, 2)}</td><td class="l">${u.d.type ? esc(TYPE[u.d.type].label) : '–'}</td><td class="l">${esc(u.d.colour || '')}</td><td class="l">${esc(u.d.notes || '')}</td></tr>`).join('')}</tbody></table>
+    <h2>Your analysis</h2><div class="tt-print">${TT.printHTML(thinkQs(), S.answers || {})}</div></div>`;
+  $('#printOut').innerHTML = h;
 }
-addEventListener('beforeprint', () => { if (!$('#printFig').firstChild) preparePrint(); });
-addEventListener('afterprint', () => { $('#printFig').innerHTML = ''; });
+addEventListener('beforeprint', () => { if (!$('#printOut').firstChild) preparePrint(); });
+addEventListener('afterprint', () => { $('#printOut').innerHTML = ''; });
 
 function loadPhoto(p) {
   const im = new Image();
@@ -432,6 +564,7 @@ const first = PHOTOS.find(p => p.id === qp) || PHOTOS.find(p => p.id === store.g
 $('#photoSel').innerHTML = PHOTOS.map(p => `<option value="${p.id}"${p === first ? ' selected' : ''}>${esc(p.label)}</option>`).join('');
 $('#student').value = store.get('pebblecount:student') || '';
 S = fresh(first); renderNav(); renderBar();
+TT.wire($('#outThink'), thinkQs, () => (S.answers = S.answers || {}), save, full => { if (full) update(); else { renderNav(); $('#out6').innerHTML = out6(); } });
 addEventListener('resize', resize);
 let lw = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { const w = $('#viewer').clientWidth; if (w !== lw) { lw = w; resize(); } }).observe($('#viewer'));
 loadPhoto(first);
