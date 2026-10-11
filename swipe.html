@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Then and Now Swipe</title>
+<!--
+  Then-and-now swipe viewer for two aligned images (e.g. Auckland Council GeoMaps 1950s and today).
+  GEOG 262 Virtual Field Trip. Open with  swipe.html?s=Orere
+  To make a pair: in GeoMaps, set up the view once, take a screenshot, change the year with the
+  timeslider WITHOUT moving the map, take a second screenshot, crop both identically.
+  Upload both to the repo and add an entry to SWIPES below.
+-->
+<style>
+:root{color-scheme:light;--ink:#0b0b0b;--ink-2:#52514e;--line:#dcdad3;--surface:#fcfcfb;--accent:#1f3a4d}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:#1b1b19;color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;display:flex;flex-direction:column}
+.bar{background:var(--surface);border-bottom:1px solid var(--line);padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.bar h1{font-size:15px;margin:0;font-weight:650}
+.bar .hint{color:var(--ink-2);font-size:13px;flex:1 1 220px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.seg button{font:inherit;font-size:13.5px;border:0;background:transparent;padding:6px 11px;cursor:pointer;color:var(--ink)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed=true]{background:var(--accent);color:#fff}
+.view{position:relative;flex:1 1 auto;min-height:260px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+.stage{position:absolute;left:0;top:0;transform-origin:0 0}
+.stage img{position:absolute;left:0;top:0;width:100%;height:100%;display:block;pointer-events:none}
+#before{clip-path:inset(0 50% 0 0)}
+.handle{position:absolute;top:0;bottom:0;width:44px;margin-left:-22px;cursor:ew-resize;display:flex;justify-content:center;z-index:3}
+.handle::before{content:"";width:3px;height:100%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.45)}
+.handle span{position:absolute;top:50%;transform:translateY(-50%);width:38px;height:38px;border-radius:50%;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.45);display:grid;place-items:center;font:700 15px/1 system-ui,sans-serif;color:#222}
+.tag{position:absolute;top:10px;z-index:2;background:rgba(15,15,13,.78);color:#fff;font-size:13.5px;font-weight:650;padding:4px 10px;border-radius:6px;pointer-events:none}
+.tag.l{left:10px}.tag.r{right:56px}
+.ctl{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px;z-index:4}
+.ctl button{width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.35);background:rgba(20,20,18,.72);color:#fff;font:600 17px/1 system-ui,sans-serif;cursor:pointer}
+.ctl button.fit{font-size:11px}
+.fade{background:var(--surface);border-top:1px solid var(--line);padding:8px 12px;display:none;align-items:center;gap:10px;font-size:13.5px}
+.fade.on{display:flex}
+.fade input{flex:1 1 auto;max-width:520px}
+.credit{background:var(--surface);border-top:1px solid var(--line);padding:5px 12px;font-size:12px;color:var(--ink-2)}
+.msg{position:absolute;inset:0;display:grid;place-items:center;color:#ddd;text-align:center;padding:20px;z-index:5}
+button:focus-visible,input:focus-visible,.handle:focus-visible{outline:2px solid #6fa0c8;outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="bar">
+  <h1 id="title">Then and now</h1>
+  <span class="hint" id="hint">Drag the white line (or click anywhere) to compare. Scroll or + / − to zoom; when zoomed, drag the photo to move.</span>
+  <span class="seg" role="group" aria-label="Compare mode"><button data-mode="swipe" aria-pressed="true">Swipe</button><button data-mode="fade" aria-pressed="false">Fade</button></span>
+</div>
+<div class="view" id="view">
+  <div class="stage" id="stage">
+    <img id="after" alt="">
+    <img id="before" alt="">
+  </div>
+  <div class="tag l" id="tagL"></div><div class="tag r" id="tagR"></div>
+  <div class="handle" id="handle" tabindex="0" role="slider" aria-label="Divider position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"><span>⇆</span></div>
+  <div class="ctl"><button data-z="1.5" aria-label="Zoom in">+</button><button data-z="0.667" aria-label="Zoom out">−</button><button class="fit" data-fit aria-label="Show whole image">FIT</button></div>
+  <div class="msg" id="msg">Loading images…</div>
+</div>
+<div class="fade" id="fadeBar"><span id="fadeL"></span><input type="range" id="fade" min="0" max="100" value="50" aria-label="Fade between the two images"><span id="fadeR"></span></div>
+<div class="credit" id="credit"></div>
+
+<script>
+(() => {
+'use strict';
+const SWIPES = {
+  Orere: {
+    title: 'Orere River at Orere Point — 1950s and today',
+    before: { src: 'Orere_1950s.jpg', label: '1950s' },
+    after: { src: 'Orere_today.jpg', label: 'Today' },
+    credit: 'Aerial imagery: Auckland Council GeoMaps.'
+  },
+};
+const $ = s => document.querySelector(s);
+const key = new URLSearchParams(location.search).get('s');
+const C = SWIPES[key] || SWIPES[Object.keys(SWIPES)[0]];
+document.title = C.title; $('#title').textContent = C.title; $('#credit').textContent = C.credit || '';
+$('#tagL').textContent = $('#fadeL').textContent = C.before.label; $('#tagR').textContent = $('#fadeR').textContent = C.after.label;
+$('#before').alt = `${C.before.label} aerial photo`; $('#after').alt = `${C.after.label} aerial photo`;
+
+const view = $('#view'), stage = $('#stage'), bImg = $('#before'), aImg = $('#after'), handle = $('#handle');
+let IW = 0, IH = 0, z = 1, tx = 0, ty = 0, pos = 0.5, mode = 'swipe';
+
+function base() { return Math.min(view.clientWidth / IW, view.clientHeight / IH); }
+function fit() { z = 1; const s = base(); tx = (view.clientWidth - IW * s) / 2; ty = (view.clientHeight - IH * s) / 2; apply(); }
+function clampPan() {
+  const s = base() * z, w = IW * s, h = IH * s, VW = view.clientWidth, VH = view.clientHeight;
+  tx = w <= VW ? (VW - w) / 2 : Math.min(0, Math.max(VW - w, tx));
+  ty = h <= VH ? (VH - h) / 2 : Math.min(0, Math.max(VH - h, ty));
+}
+function apply() {
+  if (!IW) return; clampPan();
+  const s = base() * z;
+  stage.style.width = IW + 'px'; stage.style.height = IH + 'px';
+  stage.style.transform = `translate(${tx}px,${ty}px) scale(${s})`;
+  // divider position is in view coordinates; convert to image fraction for the clip
+  const vx = pos * view.clientWidth, fx = Math.min(1, Math.max(0, (vx - tx) / (IW * s)));
+  if (mode === 'swipe') { bImg.style.opacity = 1; bImg.style.clipPath = `inset(0 ${(1 - fx) * 100}% 0 0)`; handle.style.display = ''; handle.style.left = vx + 'px'; }
+  else { bImg.style.clipPath = 'none'; bImg.style.opacity = 1 - $('#fade').value / 100; handle.style.display = 'none'; }
+  handle.setAttribute('aria-valuenow', Math.round(pos * 100));
+  $('#tagL').style.display = $('#tagR').style.display = mode === 'swipe' ? '' : 'none';
+}
+function zoomAt(f, cx, cy) { const s0 = base() * z; const ix = (cx - tx) / s0, iy = (cy - ty) / s0; z = Math.min(Math.max(z * f, 1), 8); const s = base() * z; tx = cx - ix * s; ty = cy - iy * s; apply(); }
+
+let drag = null;
+const rel = e => { const r = view.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+view.addEventListener('pointerdown', e => {
+  if (e.target.closest('button')) return;
+  view.setPointerCapture(e.pointerId); const [x, y] = rel(e);
+  drag = { onHandle: !!e.target.closest('#handle'), x, y, tx, ty, moved: false };
+});
+view.addEventListener('pointermove', e => {
+  if (!drag) return; const [x, y] = rel(e);
+  if (Math.hypot(x - drag.x, y - drag.y) > 4) drag.moved = true;
+  if (drag.onHandle && mode === 'swipe') { pos = Math.min(1, Math.max(0, x / view.clientWidth)); apply(); }
+  else if (drag.moved && z > 1) { tx = drag.tx + (x - drag.x); ty = drag.ty + (y - drag.y); apply(); }
+});
+view.addEventListener('pointerup', e => {
+  if (drag && !drag.onHandle && !drag.moved && mode === 'swipe') { const [x] = rel(e); pos = Math.min(1, Math.max(0, x / view.clientWidth)); apply(); }
+  drag = null;
+});
+view.addEventListener('pointercancel', () => { drag = null; });
+view.addEventListener('wheel', e => { e.preventDefault(); const [x, y] = rel(e); zoomAt(Math.pow(1.0018, -e.deltaY), x, y); }, { passive: false });
+handle.addEventListener('keydown', e => { const d = e.shiftKey ? 0.1 : 0.02; if (e.key === 'ArrowLeft') { pos = Math.max(0, pos - d); apply(); e.preventDefault(); } if (e.key === 'ArrowRight') { pos = Math.min(1, pos + d); apply(); e.preventDefault(); } });
+document.addEventListener('click', e => {
+  const zb = e.target.closest('[data-z]'); if (zb) { zoomAt(Number(zb.dataset.z), view.clientWidth / 2, view.clientHeight / 2); return; }
+  if (e.target.closest('[data-fit]')) { fit(); return; }
+  const mb = e.target.closest('[data-mode]'); if (mb) { mode = mb.dataset.mode; document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b === mb)); $('#fadeBar').classList.toggle('on', mode === 'fade'); $('#hint').textContent = mode === 'fade' ? 'Move the slider below to fade from one year to the other. Scroll or + / − to zoom.' : 'Drag the white line (or click anywhere) to compare. Scroll or + / − to zoom; when zoomed, drag the photo to move.'; apply(); }
+});
+$('#fade').addEventListener('input', apply);
+
+let loaded = 0, failed = [];
+function done() {
+  if (++loaded < 2) return;
+  if (failed.length) { $('#msg').textContent = `Image not found: ${failed.join(', ')}`; return; }
+  IW = bImg.naturalWidth; IH = bImg.naturalHeight; $('#msg').style.display = 'none';
+  if (Math.abs(aImg.naturalWidth / aImg.naturalHeight - IW / IH) > 0.01) console.warn('The two images have different shapes; they may not line up.');
+  fit();
+}
+for (const [el, c] of [[bImg, C.before], [aImg, C.after]]) { el.onload = done; el.onerror = () => { failed.push(c.src); done(); }; el.src = c.src; }
+if ('ResizeObserver' in window) new ResizeObserver(() => { if (IW) { if (z === 1) fit(); else apply(); } }).observe(view);
+})();
+</script>
+</body>
+</html>
