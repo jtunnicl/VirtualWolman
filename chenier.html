@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chenier Plain Builder</title>
+<!--
+  Chenier plain builder — a simple model of how the Miranda chenier plain grew over the last 4500 years.
+  GEOG 262 Virtual Field Trip. Runs entirely in the browser.
+  Based on: Dougherty & Dickson (2012) Marine Geology 307–310: 58–72; Woodroffe et al. (1983) Marine Geology 53: 1–22.
+  The model is deliberately simple: mud builds the shore out, shell collects on the foreshore,
+  and storms throw the shell up into ridges that are then stranded as the mudflat keeps building seaward.
+-->
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f4f3ef; --surface:#fcfcfb; --surface-2:#efeee9; --line:#dcdad3; --grid:#e6e4de;
+  --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#77766f; --accent:#1f3a4d; --accent-2:#2c5470;
+  --warn-bg:#fff1d6; --warn-ink:#6b4300; --ok-bg:#e1f1e6; --ok-ink:#1d5a32; --sel:#e6eef8; --r:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.app{max-width:1240px;margin:0 auto;padding:14px 16px 28px}
+header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px 20px;flex-wrap:wrap;margin-bottom:10px}
+h1{font-size:22px;line-height:1.2;margin:0;letter-spacing:-.01em}
+.sub{margin:3px 0 0;color:var(--ink-2);font-size:14px}
+.namebox label{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink-2)}
+input[type=text]{font:inherit;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 9px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.simwrap{position:relative}
+#sim{display:block;width:100%;height:auto;border-radius:8px;background:#eef4f8}
+.hud{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13.5px;color:var(--ink-2);margin:8px 2px 2px;font-variant-numeric:tabular-nums}
+.hud b{color:var(--ink);font-weight:650}
+.meter{display:inline-block;width:80px;height:8px;background:var(--surface-2);border-radius:99px;vertical-align:middle;overflow:hidden;margin-left:4px}
+.meter span{display:block;height:100%;background:#d8c9a0}
+.banner{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(15,15,13,.85);color:#fff;padding:6px 14px;border-radius:8px;font-size:14px;font-weight:600;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
+.banner.show{opacity:1}
+.controls{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-top:12px}
+@media (min-width:900px){.controls{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
+.sliders{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.sl label{display:flex;justify-content:space-between;gap:8px;font-size:14px}
+.sl label span{color:var(--ink-2);font-variant-numeric:tabular-nums}
+.sl input{width:100%}
+.sl .help{font-size:12.5px;color:var(--ink-3)}
+.btns{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.btn{font:inherit;font-size:14px;line-height:1.2;padding:8px 13px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent-2)}
+.btn.storm{background:#5b3a8c;border-color:#5b3a8c;color:#fff}
+.btn[disabled]{opacity:.45;cursor:default}
+.btn.sm{font-size:13px;padding:5px 10px}
+input:focus-visible,button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
+nav.steps{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 6px;margin-top:14px}
+.step-btn{display:flex;align-items:center;gap:8px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 13px 5px 5px;font:inherit;font-size:14px;cursor:pointer}
+.step-btn .n{width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);font-weight:650;font-size:13px}
+.step-btn.done .n{background:var(--ok-bg);color:var(--ok-ink)}
+.step-btn[aria-current=step]{background:var(--accent);border-color:var(--accent);color:#fff}
+.step-btn[aria-current=step] .n{background:#fff;color:var(--accent)}
+.panel{display:none;margin-top:8px}
+.panel.on{display:block}
+h2{font-size:17px;margin:0 0 6px}
+h3{font-size:14px;margin:14px 0 6px}
+p{margin:6px 0}
+.muted{color:var(--ink-2)} .small{font-size:13px}
+.note{font-size:13.5px;background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:8px 0}
+.okbox{background:var(--ok-bg);color:var(--ok-ink);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13.5px}
+.warnbox{background:var(--warn-bg);color:var(--warn-ink);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13.5px}
+.calc{font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--surface-2);border-radius:8px;padding:9px 11px;margin:8px 0;white-space:pre-wrap;overflow-x:auto}
+.tablewrap{border:1px solid var(--line);border-radius:8px;overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:5px 8px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
+th:first-child,td:first-child,td.l,th.l{text-align:left}
+thead th{background:var(--surface-2);color:var(--ink-2);font-weight:600;font-size:12.5px}
+.exp{margin:6px 0;padding-left:20px}
+.exp li{margin:5px 0}
+.exp li.done::marker{color:var(--ok-ink)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;font-size:14px;z-index:70;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
+.toast.show{opacity:1}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--ink-2);margin-top:6px}
+.legend i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+/* ---- Think it through ---- */
+.tt-q{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;background:#fff}
+.tt-q.done{border-color:#9cc7a9}
+.tt-h{display:flex;gap:10px;align-items:flex-start;font-size:14.5px}
+.tt-n{flex:0 0 auto;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);font-weight:650;font-size:13px}
+.tt-q.done .tt-n{background:var(--ok-bg);color:var(--ok-ink)}
+.tt-q textarea{width:100%;font:inherit;font-size:14px;line-height:1.45;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px;resize:vertical;background:#fff;color:var(--ink)}
+.tt-wc{font-size:12.5px;color:var(--ink-3);text-align:right}
+.tt-q.done .tt-wc{color:var(--ok-ink)}
+.tt-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.tt-row input{font:600 16px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;width:120px;padding:6px 9px;border:1px solid var(--line);border-radius:8px}
+.tt-opts{display:flex;flex-direction:column;gap:4px;margin:8px 0;font-size:14px}
+.tt-opts label{display:flex;gap:8px;align-items:center}
+.tt-fb{font-size:13.5px;margin-top:6px;min-height:1em}
+.tt-fb.ok{color:var(--ok-ink)} .tt-fb.bad{color:#8a1c12}
+.tt-gate{background:var(--warn-bg);color:var(--warn-ink);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13.5px}
+.tt-gate ul{margin:4px 0 0;padding-left:18px}
+.print-only{display:none}
+@media print{
+  .tt-print h3{font-size:11.5pt;margin:8pt 0 3pt}
+  .tt-print .q{margin:0 0 8pt;break-inside:avoid}
+  .tt-print .q .p{font-weight:650;margin:0 0 2pt}
+  .tt-print .q .a{margin:0;padding:4pt 6pt;border-left:2pt solid #888;white-space:pre-wrap}
+  .pb{break-before:page}
+}
+
+@media print{
+  @page{margin:13mm}
+  body{background:#fff;font-size:10pt}
+  .app{padding:0;max-width:none}
+  .app > *:not(#printOut), .toast{display:none!important}
+  #printOut{display:block!important}
+  #printOut h1{font-size:15pt;margin:0 0 2pt}
+  #printOut h2{font-size:12.5pt;margin:8pt 0 4pt}
+  #printOut img{display:block;width:100%;margin:0 0 6pt}
+  #printOut table{font-size:9pt}
+  #printOut th,#printOut td{padding:2pt 4pt}
+  #printOut th{white-space:normal;vertical-align:bottom}
+  #printOut table{width:100%;table-layout:auto}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div><h1>Chenier plain builder</h1><p class="sub">Build the Miranda chenier plain from mud, shell and storms — 4500 years in under a minute.</p></div>
+    <div class="namebox"><label>Your name <input type="text" id="student" autocomplete="off" placeholder="First and last name" size="22"></label></div>
+  </header>
+  <div class="print-only" id="printOut"></div>
+
+  <div class="card">
+    <div class="simwrap">
+      <canvas id="sim" width="1200" height="492" aria-label="Animated cross-section of the chenier plain from the old cliff (left) to the sea (right)."></canvas>
+      <div class="banner" id="banner"></div>
+    </div>
+    <div class="hud" id="hud"></div>
+    <div class="legend">
+      <span><i style="background:#f3ecd8;border:1px solid #b8a676"></i>shell ridge (chenier)</span>
+      <span><i style="background:#8a7a62"></i>mud</span>
+      <span><i style="background:#7fae5a"></i>salt marsh / mangrove → farmland</span>
+      <span><i style="background:#9cc3dc"></i>sea (at mean sea level)</span>
+      <span><i style="background:#8c6d3f"></i>old cliff and hills</span>
+    </div>
+
+    <div class="controls">
+      <div class="sliders">
+        <div class="sl"><label for="mud">Mud supply <span id="mudV"></span></label><input type="range" id="mud" min="0" max="100" step="1"><div class="help">How fast the mudflat builds the shore out towards the sea.</div></div>
+        <div class="sl"><label for="storms">Big storms <span id="stormsV"></span></label><input type="range" id="storms" min="0" max="12" step="0.5"><div class="help">Storms with a surge big enough to throw shell up the beach.</div></div>
+        <div class="sl"><label for="shell">Shell supply <span id="shellV"></span></label><input type="range" id="shell" min="0" max="200" step="5"><div class="help">How fast shell (cockles, <i>Chione</i>, <i>Mactra</i>) collects on the foreshore.</div></div>
+        <div class="sl"><label for="high">Sea level 4000 years ago <span id="highV"></span></label><input type="range" id="high" min="0" max="2.5" step="0.1"><div class="help">Above today’s level. It then falls steadily to today’s level by 1000 years ago.</div></div>
+      </div>
+      <div>
+        <div class="btns" id="runBtns"></div>
+        <p class="small muted" id="lockNote" style="margin-top:6px"></p>
+        <div class="btns" style="margin-top:6px"><span class="small muted">Speed</span>
+          <button class="btn sm" data-speed="100">slow</button><button class="btn sm" data-speed="250">normal</button><button class="btn sm" data-speed="700">fast</button></div>
+        <h3>Your runs</h3>
+        <div class="tablewrap"><table id="runs"></table></div>
+        <p class="small muted">Press <b>Save this run</b> at the end of each experiment. You need at least three saved runs to hand in.</p>
+      </div>
+    </div>
+  </div>
+
+  <nav class="steps" id="nav" aria-label="Steps"></nav>
+
+  <section class="panel card" data-step="1">
+    <h2>1 · Experiment</h2>
+    <p class="muted">Each experiment changes one thing. Run it, watch what happens, then save the run.</p>
+    <ol class="exp" id="expList"></ol>
+    <div class="note">How the model works: every year the mudflat builds the shore out a little, and shell collects on the foreshore. When a big storm arrives, its surge throws the shell up into a ridge at the shoreline. The mudflat then keeps building seaward, stranding the ridge inland, and the swamp behind it fills with mud and becomes salt marsh. This is the five-stage model in Figure 10 of your field guide (Dougherty and Dickson, 2012).</div>
+  </section>
+
+  <section class="panel card" data-step="2">
+    <h2>2 · Compare with Miranda</h2>
+    <div id="out2"></div>
+  </section>
+
+  <section class="panel card" data-step="3">
+    <h2>3 · Think it through</h2>
+    <p class="muted small">Answer these before you print. Your answers are printed with your runs.</p>
+    <div id="outThink"></div>
+    <div class="btns" style="margin-top:8px"><button class="btn primary" data-step="4">Next: hand in →</button></div>
+  </section>
+
+  <section class="panel card" data-step="4">
+    <h2>4 · Hand in your work</h2>
+    <div id="out4"></div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nf = (v, d = 1) => (v == null || !isFinite(v)) ? '–' : v.toLocaleString('en-NZ', { minimumFractionDigits: d, maximumFractionDigits: d });
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
+
+/* ---------- real data (Schofield 1960; Woodroffe et al. 1983; Dougherty & Dickson 2012) ---------- */
+const REAL = [[13, 3900, 90], [12, 2730, 70], [10, 1960, 70], [9, 1540, 60], [8, 1260, 50], [6, 980, 60]];
+const START = 4500, CELL = 5, XMAX = 3200, NC = XMAX / CELL;
+const DEFAULTS = { mud: 32, storms: 5, shell: 60, high: 2.0 };
+
+/* ---------- model ---------- */
+let P = Object.assign({}, DEFAULTS), M = null, playing = false, speed = 250, manual = 0, seed = 1;
+function rng(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const seaLevel = age => age >= 4000 ? P.high : age <= 1000 ? 0 : P.high * (age - 1000) / 3000;
+function reset(newSeed) {
+  if (newSeed) seed = Math.floor(Math.random() * 1e6) + 1;
+  const R = rng(seed);
+  const storms = []; let t = START;
+  if (P.storms > 0) { for (;;) { t -= -Math.log(1 - R()) * 1000 / P.storms; if (t <= 0) break; storms.push({ age: t, surge: 0.2 + 1.4 * R() }); } }
+  M = { age: START, xs: 0, bank: 0, ridges: [], ground: new Float32Array(NC).fill(NaN), groundAge: new Float32Array(NC).fill(NaN), storms, si: 0, R, done: false, events: [], noRidgeStorms: 0 };
+  manual = 0; playing = false; banner('');
+}
+function step(years) {
+  for (let k = 0; k < years && !M.done; k++) {
+    const age = M.age, sl = seaLevel(age);
+    // mud builds the shore out
+    const x0 = M.xs; M.xs = Math.min(XMAX - 400, M.xs + P.mud / 100);
+    for (let c = Math.floor(x0 / CELL); c < Math.floor(M.xs / CELL); c++) if (isNaN(M.ground[c])) { M.ground[c] = sl + 0.6; M.groundAge[c] = age; }
+    // shell collects on the foreshore
+    M.bank = Math.min(2.5, M.bank + P.shell / 10000);
+    // storms
+    while (M.si < M.storms.length && M.storms[M.si].age >= age - 1) { storm(M.storms[M.si].surge, false); M.si++; }
+    M.age -= 1;
+    if (M.age <= 0) { M.age = 0; M.done = true; playing = false; banner('Today. Save this run, or change a setting and try again.'); }
+  }
+}
+function fillTo(x, sl) { for (let c = 0; c < Math.min(NC, Math.floor(x / CELL) + 1); c++) if (isNaN(M.ground[c])) { M.ground[c] = sl + 0.6; M.groundAge[c] = M.age; } }
+function storm(surge, isManual) {
+  const sl = seaLevel(M.age);
+  if (isManual) manual++;
+  if (M.bank < 0.25) { M.noRidgeStorms++; banner(`Storm! Surge +${surge.toFixed(1)} m — but too little shell on the foreshore to build a ridge.`); return; }
+  const last = M.ridges[M.ridges.length - 1];
+  const crest = sl + 1.5 + surge;
+  if (last && M.xs - (last.x + last.w / 2) < 40) {           // ridge still at the shore: storm adds to it
+    last.w += 18 * M.bank; last.crest = Math.max(last.crest, crest); last.x += 9 * M.bank; last.hits++;
+    M.xs = Math.max(M.xs, last.x + last.w / 2); fillTo(M.xs, sl);
+    banner(`Storm! Surge +${surge.toFixed(1)} m — shell thrown onto the ridge at the shore.`);
+  } else {
+    const w = 15 + 25 * M.bank, x = M.xs + w * 0.2;
+    M.ridges.push({ x, w, crest, age: Math.round(M.age), sl, hits: 1 });
+    M.xs = x + w / 2; fillTo(M.xs, sl);
+    banner(`Storm! Surge +${surge.toFixed(1)} m — a new chenier is built ${Math.round(M.age).toLocaleString('en-NZ')} years ago.`);
+  }
+  M.bank = 0;
+}
+function profileAt(x) {   // ground elevation (m relative to present MSL) at distance x, plus surface type
+  const sl = seaLevel(M.age);
+  if (x < 0) return { z: P.high + 0.8 + Math.min(6, -x * 0.03), t: 'hill' };
+  let z, t;
+  if (x <= M.xs) { const c = Math.min(NC - 1, Math.floor(x / CELL)); z = isNaN(M.ground[c]) ? sl + 0.6 : M.ground[c]; t = (M.groundAge[c] - M.age > 60) ? 'marsh' : 'mud'; }
+  else { z = Math.max(sl - 2.2, sl + 0.2 - (x - M.xs) * 0.004); t = 'flat'; }
+  for (const r of M.ridges) { const d = Math.abs(x - r.x); if (d < r.w / 2) { const base = z; const u = d / (r.w / 2), zz = base + (r.crest - base) * (1 - u * u) * (1 - 0.35 * u * u); if (zz > z) { z = zz; t = 'shell'; } } }
+  return { z, t };
+}
+
+/* ---------- drawing ---------- */
+const cv = $('#sim'), ctx = cv.getContext('2d');
+const G = { W: 1200, H: 492, ml: 56, mr: 16, mt: 18, secH: 300, tlT: 384, tlH: 64 };
+const ZMIN = -2.6, ZMAX = 5.8, XL = -150;
+const X = x => G.ml + (x - XL) / (XMAX - XL) * (G.W - G.ml - G.mr);
+const Y = z => G.mt + (ZMAX - z) / (ZMAX - ZMIN) * G.secH;
+function draw(target) {
+  const c = target || ctx; const W = G.W;
+  c.clearRect(0, 0, W, G.H); c.fillStyle = '#eef4f8'; c.fillRect(0, 0, W, G.mt + G.secH);
+  const sl = seaLevel(M.age);
+  // sea
+  c.fillStyle = '#9cc3dc'; c.fillRect(X(M.xs - 50), Y(sl), W, Y(ZMIN) - Y(sl));
+  // ground
+  const pts = []; for (let px = G.ml; px <= W - G.mr; px += 2) { const x = XL + (px - G.ml) / (W - G.ml - G.mr) * (XMAX - XL); pts.push([px, profileAt(x)]); }
+  c.beginPath(); c.moveTo(pts[0][0], Y(ZMIN)); for (const [px, p] of pts) c.lineTo(px, Y(p.z)); c.lineTo(pts[pts.length - 1][0], Y(ZMIN)); c.closePath();
+  c.fillStyle = '#8a7a62'; c.fill();
+  // surface colours
+  for (let i = 1; i < pts.length; i++) {
+    const [px, p] = pts[i], [qx, q] = pts[i - 1];
+    const col = p.t === 'shell' ? '#f3ecd8' : p.t === 'marsh' ? '#7fae5a' : p.t === 'hill' ? '#8c6d3f' : p.t === 'flat' ? '#7d6f58' : '#a08d6c';
+    c.strokeStyle = col; c.lineWidth = p.t === 'shell' ? 5 : 4; c.beginPath(); c.moveTo(qx, Y(q.z) + (p.t === 'shell' ? 2 : 1.5)); c.lineTo(px, Y(p.z) + (p.t === 'shell' ? 2 : 1.5)); c.stroke();
+  }
+  // shell ridge fill
+  for (const r of M.ridges) {
+    c.beginPath(); let first = true;
+    for (let x = r.x - r.w / 2; x <= r.x + r.w / 2; x += 2) { const p = profileAt(x); if (first) { c.moveTo(X(x), Y(p.z)); first = false; } else c.lineTo(X(x), Y(p.z)); }
+    const b = r.x + r.w / 2, a = r.x - r.w / 2; c.lineTo(X(b), Y(profileAt(b).z) + 2); c.lineTo(X(a), Y(profileAt(a).z) + 2); c.closePath();
+    c.fillStyle = '#f3ecd8'; c.fill(); c.strokeStyle = '#b8a676'; c.lineWidth = 1; c.stroke();
+  }
+  // water line and today's MSL reference
+  c.strokeStyle = '#3f7fae'; c.lineWidth = 2; c.beginPath(); c.moveTo(X(M.xs), Y(sl)); c.lineTo(W - G.mr, Y(sl)); c.stroke();
+  c.setLineDash([5, 5]); c.strokeStyle = '#52514e'; c.lineWidth = 1; c.beginPath(); c.moveTo(G.ml, Y(0)); c.lineTo(W - G.mr, Y(0)); c.stroke(); c.setLineDash([]);
+  c.font = '12px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif'; c.fillStyle = '#52514e'; c.textAlign = 'right'; c.textBaseline = 'bottom';
+  c.fillText("today's mean sea level", W - G.mr - 4, Y(0) - 3);
+  // axes
+  c.fillStyle = '#52514e'; c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let z = -2; z <= 5; z += 1) { c.fillText((z > 0 ? '+' : '') + z, G.ml - 8, Y(z)); c.strokeStyle = 'rgba(0,0,0,.08)'; c.beginPath(); c.moveTo(G.ml, Y(z)); c.lineTo(G.ml + 6, Y(z)); c.stroke(); }
+  c.save(); c.translate(14, Y(1)); c.rotate(-Math.PI / 2); c.textAlign = 'center'; c.fillText('Height (m)', 0, 0); c.restore();
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = 0; x <= XMAX; x += 500) { c.fillText(x === 0 ? '0' : (x / 1000).toLocaleString('en-NZ') + ' km', X(x), G.mt + G.secH + 6); }
+  c.fillText('Distance from the old cliff → towards the sea', X(XMAX / 2), G.mt + G.secH + 22);
+  c.textAlign = 'left'; c.fillText(`vertical exaggeration ×${Math.round(((G.W - G.ml - G.mr) / (XMAX - XL)) ** -1 * (G.secH / (ZMAX - ZMIN)))}`, G.ml + 4, G.mt + 4);
+  // ridge ages
+  c.font = '600 11.5px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif'; c.textAlign = 'center'; c.textBaseline = 'bottom';
+  let lastPx = -99;
+  for (const r of M.ridges) { const px = X(r.x); if (px - lastPx < 34) continue; lastPx = px; c.lineJoin = 'round'; c.strokeStyle = '#eef4f8'; c.lineWidth = 3; const lab = (r.age / 1000).toFixed(1) + 'k'; c.strokeText(lab, px, Y(r.crest) - 4); c.fillStyle = '#0b0b0b'; c.fillText(lab, px, Y(r.crest) - 4); }
+  // timeline
+  drawTimeline(c);
+}
+function drawTimeline(c) {
+  const t0 = G.tlT, x0 = G.ml, x1 = G.W - G.mr, T = a => x0 + (START - a) / START * (x1 - x0);
+  c.fillStyle = '#fcfcfb'; c.fillRect(0, t0 - 30, G.W, G.H - t0 + 30);
+  c.font = '12px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif'; c.textBaseline = 'middle';
+  // axis
+  c.strokeStyle = '#b9b7b0'; c.lineWidth = 1; c.beginPath(); c.moveTo(x0, t0 + 40); c.lineTo(x1, t0 + 40); c.stroke();
+  c.fillStyle = '#52514e'; c.textAlign = 'center';
+  for (let a = 4500; a >= 0; a -= 500) { c.beginPath(); c.moveTo(T(a), t0 + 37); c.lineTo(T(a), t0 + 43); c.stroke(); c.fillText(a === 0 ? 'today' : a.toLocaleString('en-NZ'), T(a), t0 + 54); }
+  c.textAlign = 'right'; c.fillText('years ago', x1, G.H - 6);
+  // rows
+  c.textAlign = 'left'; c.fillStyle = '#0b0b0b'; c.font = '600 12px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif';
+  c.fillText('When did the cheniers form?', x0, t0 - 14);
+  c.font = '12px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif'; c.fillStyle = '#1f3a4d'; c.beginPath(); c.arc(x0 + 196, t0 - 14, 4.5, 0, 7); c.fill();
+  c.fillStyle = '#52514e'; c.fillText('dated Miranda cheniers (± dating error)', x0 + 206, t0 - 14);
+  c.fillStyle = '#b8862b'; c.beginPath(); c.moveTo(x0 + 466, t0 - 19); c.lineTo(x0 + 471, t0 - 9); c.lineTo(x0 + 461, t0 - 9); c.closePath(); c.fill();
+  c.fillStyle = '#52514e'; c.fillText('your run', x0 + 478, t0 - 14);
+  for (const [n, a, e] of REAL) { c.fillStyle = 'rgba(31,58,77,.18)'; c.fillRect(T(a + e), t0 + 1, T(a - e) - T(a + e), 10); c.fillStyle = '#1f3a4d'; c.beginPath(); c.arc(T(a), t0 + 6, 4.5, 0, 7); c.fill(); }
+  for (const r of M.ridges) { c.fillStyle = '#b8862b'; c.beginPath(); c.moveTo(T(r.age), t0 + 18); c.lineTo(T(r.age) + 5, t0 + 28); c.lineTo(T(r.age) - 5, t0 + 28); c.closePath(); c.fill(); }
+  c.strokeStyle = '#c0392b'; c.lineWidth = 2; c.beginPath(); c.moveTo(T(M.age), t0 - 4); c.lineTo(T(M.age), t0 + 44); c.stroke();
+}
+function hud() {
+  const sl = seaLevel(M.age);
+  $('#hud').innerHTML = `<span>Time: <b>${M.age <= 0 ? 'today' : Math.round(M.age).toLocaleString('en-NZ') + ' years ago'}</b></span>
+    <span>Sea level: <b>${sl >= 0 ? '+' : ''}${sl.toFixed(2)} m</b> (vs today)</span>
+    <span>Plain width: <b>${Math.round(M.xs).toLocaleString('en-NZ')} m</b></span>
+    <span>Cheniers: <b>${M.ridges.length}</b></span>
+    <span>Shell on the foreshore <span class="meter"><span style="width:${M.bank / 2.5 * 100}%"></span></span></span>`;
+}
+let bt = 0; function banner(m) { const b = $('#banner'); if (!m) { b.classList.remove('show'); return; } b.textContent = m; b.classList.add('show'); clearTimeout(bt); bt = setTimeout(() => b.classList.remove('show'), 2600); }
+let tt = 0; function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 3200); }
+
+/* ---------- loop ---------- */
+let last = 0;
+function loop(ts) {
+  if (playing) { const dt = last ? Math.min(0.1, (ts - last) / 1000) : 0; step(Math.max(1, Math.round(dt * speed))); draw(); hud(); renderButtons(); }
+  last = ts; requestAnimationFrame(loop);
+}
+
+/* ---------- UI ---------- */
+const S = (() => { try { const s = JSON.parse(store.get('chenier:v1')); if (s && s.v === 1) return s; } catch (e) { } return { v: 1, runs: [], answers: {}, params: DEFAULTS }; })();
+P = Object.assign({}, DEFAULTS, S.params || {});
+function save() { S.params = P; store.set('chenier:v1', JSON.stringify(S)); }
+const sliders = {
+  mud: v => `${v} m per century`, storms: v => `${v} per 1000 years`, shell: v => v === 0 ? 'none' : v < 40 ? 'low' : v < 90 ? 'medium' : v < 140 ? 'high' : 'very high', high: v => `+${Number(v).toFixed(1)} m`
+};
+function syncSliders() { for (const k in sliders) { $('#' + k).value = P[k]; $('#' + k + 'V').textContent = sliders[k](P[k]); } }
+function locked() { return M.age < START && !M.done; }
+let btnKey = '';
+function renderButtons(force) {
+  const run = locked();
+  const key = [run, playing, M.done, M.age < START, speed].join('|');
+  if (!force && key === btnKey) return; btnKey = key;
+  for (const k in sliders) $('#' + k).disabled = run;
+  $('#lockNote').textContent = run ? 'Settings are locked while a run is going. Press Restart to change them.' : M.done ? 'Run finished.' : 'Choose your settings, then press Play.';
+  $('#runBtns').innerHTML = (M.done ? '' : `<button class="btn primary" data-act="play">${playing ? '❚❚ Pause' : M.age < START ? '▶ Continue' : '▶ Play'}</button>`) +
+    `<button class="btn storm" data-act="storm" ${M.done || M.age >= START ? 'disabled' : ''}>⚡ Storm now</button>
+     <button class="btn" data-act="restart">↺ Restart</button>
+     <button class="btn" data-act="save" ${M.done ? '' : 'disabled'}>Save this run</button>
+     <button class="btn sm" data-act="defaults" ${run ? 'disabled' : ''}>Reset settings</button>`;
+  document.querySelectorAll('[data-speed]').forEach(b => b.style.fontWeight = Number(b.dataset.speed) === speed ? '700' : '400');
+}
+function runSummary() {
+  const r = M.ridges, old = r[0], young = r[r.length - 1];
+  const sp = r.length > 1 ? (r[r.length - 1].x - r[0].x) / (r.length - 1) : NaN;
+  return { ...P, manual, ridges: r.length, width: M.xs, oldCrest: old ? old.crest : NaN, youngCrest: young ? young.crest : NaN, oldAge: old ? old.age : NaN, spacing: sp, seed, noRidge: M.noRidgeStorms };
+}
+function renderRuns() {
+  const rows = S.runs.map((r, i) => `<tr><td>Run ${i + 1}</td><td>${r.mud}</td><td>${r.storms}</td><td>${sliders.shell(r.shell)}</td><td>+${Number(r.high).toFixed(1)}</td><td>${r.ridges}${r.manual ? ` <span class="small muted">(${r.manual} ⚡)</span>` : ''}</td><td>${Math.round(r.width).toLocaleString('en-NZ')}</td><td>${nf(r.oldCrest, 1)} / ${nf(r.youngCrest, 1)}</td><td><button class="btn sm" data-del="${i}" aria-label="Delete run ${i + 1}">✕</button></td></tr>`).join('');
+  $('#runs').innerHTML = `<thead><tr><th>Run</th><th>Mud (m/century)</th><th>Storms /1000 yr</th><th>Shell</th><th>Sea level 4000 yr ago (m)</th><th>Cheniers</th><th>Plain width (m)</th><th>Crest: oldest / youngest (m)</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="9" class="l muted">No runs saved yet.</td></tr>'}</tbody>`;
+}
+const EXPS = [
+  { t: 'Run the model with the <b>default settings</b> (press “Reset settings” first). How many cheniers form? How wide is the plain?', ok: r => r.mud === DEFAULTS.mud && r.storms === DEFAULTS.storms && r.shell === DEFAULTS.shell && Number(r.high) === DEFAULTS.high },
+  { t: 'Turn <b>big storms to 0</b> and run again. What forms instead of cheniers?', ok: r => Number(r.storms) === 0 },
+  { t: 'Set <b>sea level 4000 years ago to 0</b> (no fall in sea level). Compare the crest height of the oldest and youngest ridges with your first run.', ok: r => Number(r.high) === 0 },
+  { t: '<b>Double the mud supply</b> and run again. What happens to the spacing between the cheniers?', ok: r => r.mud >= 2 * DEFAULTS.mud && Number(r.storms) > 0 },
+  { t: '<b>Your choice:</b> try to match the real Miranda plain (about 2 km wide, 13 ridges, ages in the timeline). Use “⚡ Storm now” if you like.', ok: r => true, any: true },
+];
+function renderExps() {
+  $('#expList').innerHTML = EXPS.map((e, i) => { const d = i < 4 ? S.runs.some(e.ok) : S.runs.length >= 5; return `<li class="${d ? 'done' : ''}">${e.t}${d ? ' <span class="small" style="color:var(--ok-ink)">✓ saved</span>' : ''}</li>`; }).join('');
+}
+function out2() {
+  const r = M.ridges;
+  return `<p class="muted small">The timeline under the cross-section compares your ridges (▲) with the dated Miranda cheniers (●, with the dating error as a bar). The dated ages are from Schofield (1960) and Woodroffe et al. (1983), as listed by Dougherty and Dickson (2012).</p>
+  <div class="tablewrap" style="max-width:640px"><table><thead><tr><th>Chenier</th><th>Radiocarbon age (years before 1950)</th></tr></thead><tbody>${REAL.map(([n, a, e]) => `<tr><td>${n}</td><td>${a.toLocaleString('en-NZ')} ± ${e}</td></tr>`).join('')}</tbody></table></div>
+  <h3>What the real plain looks like</h3>
+  <ul class="small" style="padding-left:18px;margin:4px 0">
+    <li>13 shell ridges across a plain about 2 km wide, built over the last 4500 years (Pūkorokoro Miranda Shorebird Centre).</li>
+    <li>Ridges are 20 to more than 100 m wide, and the oldest ridges at the back of the plain are about a metre higher than those near the modern shore.</li>
+    <li>Storm-ridge crests stand 1.7–3.1 m above mean sea level (Woodroffe et al., 1983).</li>
+    <li>Sea level fell from about +2 m around 4000 years ago to today’s level by about 1000 years ago (Dougherty and Dickson, 2012). Earlier work put the highstand lower, nearer +0.8 m.</li>
+  </ul>
+  <h3>Your current run</h3>
+  <div class="tablewrap"><table><thead><tr><th>Ridge</th><th>Formed (years ago)</th><th>Distance from cliff (m)</th><th>Width (m)</th><th>Crest height (m above today’s MSL)</th><th>Storms that built it</th></tr></thead>
+  <tbody>${r.map((q, i) => `<tr><td>${i + 1}</td><td>${q.age.toLocaleString('en-NZ')}</td><td>${Math.round(q.x).toLocaleString('en-NZ')}</td><td>${Math.round(q.w)}</td><td>${q.crest.toFixed(2)}</td><td>${q.hits}</td></tr>`).join('') || '<tr><td colspan="6" class="l muted">Run the model to fill this table.</td></tr>'}</tbody></table></div>
+  <div class="note"><b>Look further:</b> open <a href="https://earthengine.google.com/timelapse/" target="_blank" rel="noopener">Google Earth Timelapse</a>, search for <b>Miranda, New Zealand</b>, and play 1984 to today. Watch the shell spit at the shore, and the southern Firth of Thames near the Waihou River mouth. What is spreading across the mudflats?</div>`;
+}
+let step_ = 1;
+const STEPS = ['Experiment', 'Compare with Miranda', 'Think it through', 'Hand in'];
+function renderNav() {
+  const done = [S.runs.length >= 3, true, !TT.missing(thinkQs(), S.answers).length, false];
+  $('#nav').innerHTML = STEPS.map((t, i) => `<button type="button" class="step-btn${done[i] && i < 3 ? ' done' : ''}" data-step="${i + 1}" ${i + 1 === step_ ? 'aria-current="step"' : ''}><span class="n">${done[i] && i < 3 && i + 1 !== step_ ? '✓' : i + 1}</span>${t}</button>`).join('');
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', Number(p.dataset.step) === step_));
+}
+function out4() {
+  const name = $('#student').value.trim(), miss = TT.missing(thinkQs(), S.answers).length, enough = S.runs.length >= 3;
+  return `<dl style="margin:6px 0"><dt class="small muted">Name</dt><dd style="margin:0 0 6px;font-weight:600">${name ? esc(name) : '<span class="warnbox" style="padding:2px 6px">⚠ add your name at the top</span>'}</dd></dl>
+  <p class="small muted">Two pages. Page 1: your final cross-section and your saved runs. Page 2: your answers. Choose <b>Save as PDF</b> in the print window.</p>
+  ${!enough ? `<div class="tt-gate">Save at least three runs first (you have ${S.runs.length}).</div>` : ''}
+  ${TT.gate(thinkQs(), S.answers, '<button class="btn sm" data-step="3" style="margin-top:6px">Go to Think it through</button>')}
+  <button class="btn primary" data-act="print" ${enough && !miss ? '' : 'disabled'}>Print / save as PDF</button>`;
+}
+function update() { save(); renderButtons(true); renderRuns(); renderExps(); renderNav(); $('#out2').innerHTML = out2(); $('#out4').innerHTML = out4(); if (!TT.typing($('#outThink'))) $('#outThink').innerHTML = TT.html(thinkQs(), S.answers); hud(); draw(); }
+
+
+/* ---------- Think it through (shared component) ---------- */
+const TT = (() => {
+  const e = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const words = s => (String(s || '').trim().match(/\S+/g) || []).length;
+  const num = s => { const v = parseFloat(String(s).replace(',', '.')); return isFinite(v) ? v : NaN; };
+  function done(q, a) {
+    a = a || {};
+    if (q.type === 'text') return words(a.v) >= q.min;
+    if (q.type === 'number') return !!(a.ok || (a.tries || 0) >= 2);
+    if (q.type === 'choice') return !!a.checked;
+    return true;
+  }
+  function html(qs, A) {
+    return qs.map((q, i) => {
+      const a = A[q.id] || {}, d = done(q, a); let b = '';
+      if (q.type === 'text') b = `<textarea data-tt="${q.id}" rows="4" placeholder="Type your answer here…">${e(a.v)}</textarea><div class="tt-wc" data-wc="${q.id}">${words(a.v)} / ${q.min} words minimum</div>`;
+      if (q.type === 'number') {
+        const fin = a.ok || (a.tries || 0) >= 2;
+        b = `<div class="tt-row"><input data-tt="${q.id}" inputmode="decimal" value="${e(a.v)}" ${fin ? 'disabled' : ''} aria-label="Your answer"> <span>${e(q.unit || '')}</span> <button class="btn sm" data-ttcheck="${q.id}" ${fin ? 'disabled' : ''}>Check</button></div>
+          <div class="tt-fb ${a.ok ? 'ok' : a.msg ? 'bad' : ''}">${e(a.msg || '')}</div>${fin && q.reveal ? `<div class="calc">${q.reveal()}</div>` : ''}`;
+      }
+      if (q.type === 'choice') b = `<div class="tt-opts">${q.options.map((o, j) => `<label><input type="radio" name="tt_${q.id}" data-tt="${q.id}" value="${j}" ${String(a.v) === String(j) ? 'checked' : ''} ${a.checked ? 'disabled' : ''}> ${e(o)}</label>`).join('')}</div>
+          <button class="btn sm" data-ttcheck="${q.id}" ${a.checked ? 'disabled' : ''}>Check</button>
+          <div class="tt-fb ${a.checked ? (a.ok ? 'ok' : 'bad') : ''}">${e(a.msg || '')}</div>${a.checked && q.reveal ? `<div class="calc">${q.reveal()}</div>` : ''}`;
+      return `<div class="tt-q${d ? ' done' : ''}" data-ttq="${q.id}"><div class="tt-h"><span class="tt-n">${d ? '✓' : i + 1}</span><div>${q.prompt}</div></div>${q.hint ? `<p class="small muted" style="margin:6px 0 0 34px">${q.hint}</p>` : ''}${b}</div>`;
+    }).join('');
+  }
+  function check(q, A) {
+    const a = A[q.id] = A[q.id] || {};
+    if (q.type === 'number') {
+      const v = num(a.v); if (!isFinite(v)) { a.msg = 'Type a number first.'; return; }
+      a.tries = (a.tries || 0) + 1; const r = q.check(v); a.ok = r.ok;
+      a.msg = r.ok ? '✓ ' + (r.msg || 'Correct.') : (a.tries >= 2 ? '✗ ' + (r.msg || 'Not quite.') + ' The working is shown below.' : '✗ ' + (r.msg || 'Not quite — try again.'));
+    }
+    if (q.type === 'choice') {
+      if (a.v == null || a.v === '') { a.msg = 'Choose an answer first.'; return; }
+      a.checked = true; a.ok = Number(a.v) === q.answer(); a.msg = (a.ok ? '✓ ' : '✗ ') + q.explain(Number(a.v));
+    }
+  }
+  function missing(qs, A) { return qs.filter(q => !done(q, A[q.id])); }
+  function printHTML(qs, A) {
+    return qs.map((q, i) => {
+      const a = A[q.id] || {}; let ans = '';
+      if (q.type === 'text') ans = a.v ? e(a.v) : '<i>(not answered)</i>';
+      if (q.type === 'number') ans = a.v != null && a.v !== '' ? `${e(a.v)} ${e(q.unit || '')} — ${a.ok ? 'correct' : (a.tries >= 2 ? 'incorrect after two tries; working: ' + q.reveal().replace(/<[^>]+>/g, '') : 'not checked')}` : '<i>(not answered)</i>';
+      if (q.type === 'choice') ans = a.v != null ? `${e(q.options[a.v])}${a.checked ? ' — ' + e(a.msg.replace(/^[✓✗] /, '')) : ''}` : '<i>(not answered)</i>';
+      return `<div class="q"><p class="p">${i + 1}. ${q.prompt.replace(/<[^>]+>/g, '')}</p><p class="a">${ans}</p></div>`;
+    }).join('');
+  }
+  // wire events: getQs() -> questions, A -> answers object, save(), refresh()
+  function wire(root, getQs, getA, save, refresh) {
+    root.addEventListener('input', ev => {
+      const id = ev.target.dataset && ev.target.dataset.tt; if (!id) return;
+      const A = getA(); A[id] = A[id] || {}; A[id].v = ev.target.value; save();
+      const q = getQs().find(x => x.id === id); if (!q) return;
+      const box = root.querySelector(`[data-ttq="${id}"]`);
+      if (q.type === 'text') { const wc = root.querySelector(`[data-wc="${id}"]`); if (wc) wc.textContent = `${words(A[id].v)} / ${q.min} words minimum`; }
+      if (box) { const d = done(q, A[id]); box.classList.toggle('done', d); const n = box.querySelector('.tt-n'); if (n) n.textContent = d ? '✓' : getQs().findIndex(x => x.id === id) + 1; }
+      refresh(false);
+    });
+    root.addEventListener('change', ev => { const id = ev.target.dataset && ev.target.dataset.tt; if (id && ev.target.type === 'radio') { const A = getA(); A[id] = A[id] || {}; A[id].v = ev.target.value; save(); } });
+    root.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-ttcheck]'); if (!b) return;
+      const q = getQs().find(x => x.id === b.dataset.ttcheck); if (!q) return;
+      check(q, getA()); save(); refresh(true);
+    });
+  }
+  function gate(qs, A, goStepHtml) {
+    const m = missing(qs, A);
+    if (!m.length) return '';
+    return `<div class="tt-gate">Before you can print, finish the questions in <b>Think it through</b>:<ul>${m.map(q => `<li>${q.prompt.replace(/<[^>]+>/g, '').slice(0, 90)}${q.prompt.length > 90 ? '…' : ''}</li>`).join('')}</ul>${goStepHtml || ''}</div>`;
+  }
+  // true while the student is typing in a question box (don't re-render under them)
+  const typing = root => { const a = document.activeElement; return !!(a && root.contains(a) && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && a.type !== 'radio' && a.type !== 'checkbox'))); };
+  return { html, check, done, missing, printHTML, wire, gate, words, typing };
+})();
+
+
+function thinkQs() {
+  return [
+    { id: 'c_sl', type: 'number', unit: 'mm per year', prompt: 'Dougherty and Dickson (2012) found that sea level fell about <b>2 m</b> between <b>4000</b> and <b>1000</b> years ago. What is the average rate of fall in <b>millimetres per year</b>?',
+      check: v => Math.abs(v - 0.667) <= 0.03 ? { ok: true } : { ok: false, msg: v > 10 ? 'Check your units — the answer is in millimetres per year.' : 'Not quite.' },
+      reveal: () => '2 m = 2000 mm;  2000 mm ÷ (4000 − 1000) years = 2000 ÷ 3000 = 0.67 mm per year' },
+    { id: 'c_long', type: 'number', unit: 'm per year', prompt: 'The plain is about <b>2 km</b> wide and was built over about <b>4500 years</b>. On average, how fast did the shore build out, in <b>metres per year</b>?',
+      check: v => Math.abs(v - 0.444) <= 0.03 ? { ok: true } : { ok: false, msg: 'Not quite.' },
+      reveal: () => '2000 m ÷ 4500 years = 0.44 m per year' },
+    { id: 'c_modern', type: 'number', unit: 'm per year', prompt: 'Between <b>1977</b> and <b>1988</b>, the modern chenier at the shore grew <b>550 m</b> southwards along the coast (Dougherty and Dickson, 2012). How fast is that, in metres per year?',
+      check: v => Math.abs(v - 50) <= 1.5 ? { ok: true } : { ok: false, msg: 'Not quite.' },
+      reveal: () => '550 m ÷ (1988 − 1977) years = 550 ÷ 11 = 50 m per year' },
+    { id: 'c_storms', type: 'text', min: 25, prompt: 'What happened in your run with no big storms? Use it to explain what storms do in building a chenier plain, and what the mud does.' },
+    { id: 'c_height', type: 'text', min: 25, prompt: 'Compare the crest heights of the oldest and youngest ridges in your runs with and without a fall in sea level. The real oldest ridges are about a metre higher than the youngest. Which sea-level history fits better: a highstand of about +2 m or about +0.8 m? Try both before you answer.' },
+    { id: 'c_rates', type: 'text', min: 25, prompt: 'The modern chenier moved about 100 times faster (50 m per year) than the long-term average build-out of the plain. Why is a short burst of change so different from the long-term average? Give two reasons.' },
+    { id: 'c_model', type: 'text', min: 20, prompt: 'Name one important thing this model leaves out, and how it might change the result.', hint: 'Think about Figure 10 and the drone photos: sideways (alongshore) growth of spits, tides, mangroves, ridges moving landward, settling of the mud…' },
+  ];
+}
+
+/* ---------- print ---------- */
+function preparePrint() {
+  const name = $('#student').value.trim(), d = new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' });
+  draw(); const img = cv.toDataURL('image/png');
+  const rows = S.runs.map((r, i) => `<tr><td>Run ${i + 1}</td><td>${r.mud}</td><td>${r.storms}</td><td>${sliders.shell(r.shell)}</td><td>+${Number(r.high).toFixed(1)}</td><td>${r.manual || 0}</td><td>${r.ridges}</td><td>${Math.round(r.width).toLocaleString('en-NZ')}</td><td>${nf(r.spacing, 0)}</td><td>${nf(r.oldCrest, 2)}</td><td>${nf(r.youngCrest, 2)}</td></tr>`).join('');
+  $('#printOut').innerHTML = `<h1>Chenier plain builder — Miranda</h1><p class="small"><b>${name ? esc(name) : 'Name: ____________________'}</b> · ${d}</p>
+    <h2>Final cross-section (current run)</h2><img alt="Cross-section of the simulated chenier plain" src="${img}">
+    <h2>Saved runs</h2><table><thead><tr><th>Run</th><th>Mud (m/century)</th><th>Storms /1000 yr</th><th>Shell</th><th>Sea level 4000 yr ago (m)</th><th>Extra ⚡ storms</th><th>Cheniers</th><th>Plain width (m)</th><th>Mean spacing (m)</th><th>Oldest crest (m)</th><th>Youngest crest (m)</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="small">Dated Miranda cheniers (years before 1950): ${REAL.map(([n, a, e]) => `${n}: ${a} ± ${e}`).join(' · ')}.</p>
+    <div class="pb"><h2>Your analysis</h2><div class="tt-print">${TT.printHTML(thinkQs(), S.answers)}</div>
+    <p class="small">Sources: Dougherty, A.J. and Dickson, M.E. (2012) Marine Geology 307–310: 58–72. Woodroffe, C.D., Curtis, R.J. and McLean, R.F. (1983) Marine Geology 53: 1–22.</p></div>`;
+}
+addEventListener('beforeprint', () => { if (!$('#printOut').firstChild) preparePrint(); });
+addEventListener('afterprint', () => { $('#printOut').innerHTML = ''; });
+
+/* ---------- events ---------- */
+document.addEventListener('click', e => {
+  const st = e.target.closest('[data-step]'); if (st) { step_ = Number(st.dataset.step); update(); return; }
+  const sp = e.target.closest('[data-speed]'); if (sp) { speed = Number(sp.dataset.speed); renderButtons(); return; }
+  const dl = e.target.closest('[data-del]'); if (dl) { if (confirm('Delete this run?')) { S.runs.splice(Number(dl.dataset.del), 1); update(); } return; }
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  switch (a.dataset.act) {
+    case 'play': if (M.done) return; playing = !playing; last = 0; renderButtons(); break;
+    case 'storm': if (!M.done && M.age < START) { storm(0.2 + 1.4 * Math.random(), true); draw(); hud(); } break;
+    case 'restart': reset(true); update(); break;
+    case 'save': if (S.runs.length >= 8) { toast('You have 8 runs saved. Delete one first.'); return; } S.runs.push(runSummary()); toast(`Saved as Run ${S.runs.length}.`); update(); break;
+    case 'defaults': P = Object.assign({}, DEFAULTS); syncSliders(); reset(false); update(); break;
+    case 'print': preparePrint(); setTimeout(() => print(), 60); break;
+  }
+});
+for (const k in sliders) $('#' + k).addEventListener('input', e => { P[k] = Number(e.target.value); $('#' + k + 'V').textContent = sliders[k](P[k]); reset(false); save(); draw(); hud(); renderButtons(); });
+$('#student').addEventListener('input', e => { store.set('pebblecount:student', e.target.value); if (step_ === 4) $('#out4').innerHTML = out4(); });
+
+$('#student').value = store.get('pebblecount:student') || '';
+syncSliders(); reset(true);
+TT.wire($('#outThink'), thinkQs, () => S.answers, save, full => { if (full) update(); else { renderNav(); $('#out4').innerHTML = out4(); } });
+update(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
