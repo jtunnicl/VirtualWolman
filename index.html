@@ -1151,7 +1151,10 @@ function thinkQs() {
   }
   const tb = classTable('b'), d16 = interpD(tb, 16), d50 = interpD(tb, 50), d84 = interpD(tb, 84), MA = meanAxes(), qs = [];
   if (TRIP) {
-    if (MA && d50 && !d50.below) return [{ id: 's_mean', type: 'text', min: 20, prompt: `Your mean b-axis is ${MA.b.toFixed(1)} mm, but D50 is ${d50.D.toFixed(1)} mm. Explain why the two are different.`, hint: 'Think about which points the mean leaves out (the fines), and what a few very large stones do to an average.' }];
+    // Trip version: the one question is the report's own item (Task 2, item 1: mean clast size).
+    if (MA) return [{ id: 's_report', type: 'number', unit: 'mm', prompt: '<b>Report, Stop A1/B6, Task 2 item 1:</b> what is the mean clast size of your sample? Give the mean <b>b-axis</b> from Step 6, in mm. (The report asks for the A, B and C axes; from a photo only a and b can be measured, so the b-axis is the one to report.)', hint: 'It is in Step 6, under “Mean of measured stones”.',
+      check: v => Math.abs(v - MA.b) <= 0.5 ? { ok: true } : { ok: false, msg: v > MA.b ? 'Too high.' : 'Too low.' },
+      reveal: () => `Mean b-axis = ${MA.b.toFixed(1)} mm (${MA.n} stones)` }];
     return [{ id: 's_method', type: 'text', min: 20, prompt: 'Give one way the photo method could give a different grain size from measuring the same stones with callipers in the field. Would it make the result too big or too small?' }];
   }
   if (d16 && d84 && !d16.below && !d84.below) {
